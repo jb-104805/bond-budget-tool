@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Budget Tool</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; max-width: 720px; margin-inline: auto; }
+  h1 { font-size: 1.25rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  th { font-weight: 600; }
+  .remaining-negative { color: #c0392b; font-weight: 600; }
+  .remaining-positive { color: #27ae60; }
+  input { display: block; width: 100%; box-sizing: border-box; padding: 0.5rem; margin-bottom: 0.5rem; }
+  button { padding: 0.5rem 1rem; cursor: pointer; }
+  #login-view, #dashboard-view { display: none; }
+  #login-view.active, #dashboard-view.active { display: block; }
+  #error { color: #c0392b; min-height: 1.2em; }
+</style>
+</head>
+<body>
+
+<div id="login-view">
+  <h1>Budget Tool — Sign In</h1>
+  <input id="email" type="email" placeholder="Email" autocomplete="username">
+  <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+  <button id="login-btn">Sign In</button>
+  <p id="error"></p>
+</div>
+
+<div id="dashboard-view">
+  <h1>Budget Dashboard</h1>
+  <p id="month-label"></p>
+  <table id="category-table">
+    <thead>
+      <tr><th>Category</th><th>Budgeted</th><th>Spent</th><th>Remaining</th><th>% Spent</th></tr>
+    </thead>
+    <tbody id="category-rows"></tbody>
+  </table>
+  <p id="empty-state" style="display:none; color:#777;">No categories set up yet.</p>
+  <button id="logout-btn" style="margin-top:1rem;">Sign Out</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL = 'https://ldpzpobdhchuervziqrn.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxkcHpwb2JkaGNodWVydnppcXJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1Mzg4NTIsImV4cCI6MjEwNDExNDg1Mn0.aadfXiUABUd-jAUWCti_XF-bZ5ceUXXFIOaR5L9TLr4';
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const loginView = document.getElementById('login-view');
+const dashboardView = document.getElementById('dashboard-view');
+const errorEl = document.getElementById('error');
+
+function showLogin() {
+  loginView.classList.add('active');
+  dashboardView.classList.remove('active');
+}
+
+function showDashboard() {
+  loginView.classList.remove('active');
+  dashboardView.classList.add('active');
+  loadDashboard();
+}
+
+document.getElementById('login-btn').addEventListener('click', async () => {
+  errorEl.textContent = '';
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  if (error) errorEl.textContent = error.message;
+});
+
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  await client.auth.signOut();
+});
+
+client.auth.onAuthStateChange((_event, session) => {
+  if (session) showDashboard();
+  else showLogin();
+});
+
+function currentMonthStart() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+}
+
+async function loadDashboard() {
+  const month = currentMonthStart();
+  document.getElementById('month-label').textContent = 'Month: ' + month;
+
+  const { data: categories, error: catError } = await client
+    .from('category')
+    .select('id, name')
+    .eq('active', true);
+
+  const { data: months, error: monthError } = await client
+    .from('category_month')
+    .select('category_id, allocation_amount, opening_balance')
+    .eq('month', month);
+
+  const { data: lines, error: lineError } = await client
+    .from('transaction_category_line')
+    .select('category_id, amount, transaction(budget_date)');
+
+  if (catError || monthError || lineError) {
+    console.error(catError, monthError, lineError);
+    errorEl.textContent = 'Error loading dashboard data — see console.';
+    return;
+  }
+
+  const monthByCategory = Object.fromEntries((months || []).map(m => [m.category_id, m]));
+  const spentByCategory = {};
+  const monthPrefix = month.slice(0, 7);
+  for (const line of (lines || [])) {
+    const txMonth = line.transaction && line.transaction.budget_date
+      ? line.transaction.budget_date.slice(0, 7)
+      : null;
+    if (txMonth === monthPrefix) {
+      spentByCategory[line.category_id] = (spentByCategory[line.category_id] || 0) + Number(line.amount);
+    }
+  }
+
+  const rowsEl = document.getElementById('category-rows');
+  rowsEl.innerHTML = '';
+
+  if (!categories || categories.length === 0) {
+    document.getElementById('empty-state').style.display = 'block';
+    return;
+  }
+  document.getElementById('empty-state').style.display = 'none';
+
+  for (const cat of categories) {
+    const cm = monthByCategory[cat.id];
+    const allocated = cm ? Number(cm.allocation_amount) + Number(cm.opening_balance || 0) : 0;
+    const spent = spentByCategory[cat.id] || 0;
+    const remaining = allocated - spent;
+    const pct = allocated > 0 ? Math.round((spent / allocated) * 100) : 0;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${cat.name}</td>
+      <td>$${allocated.toFixed(2)}</td>
+      <td>$${spent.toFixed(2)}</td>
+      <td class="${remaining < 0 ? 'remaining-negative' : 'remaining-positive'}">$${remaining.toFixed(2)}</td>
+      <td>${pct}%</td>
+    `;
+    rowsEl.appendChild(tr);
+  }
+}
+</script>
+</body>
+</html>
