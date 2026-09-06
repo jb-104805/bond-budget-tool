@@ -44,9 +44,25 @@ async function plaidFetch(path: string, body: Record<string, unknown>) {
   return json
 }
 
+// Plaid's personal_finance_category isn't reliably populated for card-payment
+// transactions in practice, so credit-card-payment detection also falls back
+// to matching common real-world payment phrasing on the transaction name
+// (e.g. "Payment Thank You-Mobile", "ONLINE PAYMENT, THANK YOU", "Payment to
+// Chase card ending in 1234") — the exact mechanism spec §19/§48 explicitly
+// leaves open for technical-design-time validation. Revisit if false
+// positives/negatives show up.
+const CARD_PAYMENT_NAME_PATTERN = /payment.*thank you|online payment|mobile payment|payment to .*card|thank you.*payment/i
+
 function classify(plaidTx: any, accountType: string): { transactionType: string; incomeSource: string | null } {
   const detailed: string = plaidTx.personal_finance_category?.detailed ?? ''
-  if (accountType === 'CREDIT_CARD' && detailed === 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT') {
+  const primary: string = plaidTx.personal_finance_category?.primary ?? ''
+  const name: string = plaidTx.name ?? ''
+
+  const looksLikeCardPayment =
+    accountType === 'CREDIT_CARD' &&
+    (detailed === 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT' || primary === 'LOAN_PAYMENTS' || CARD_PAYMENT_NAME_PATTERN.test(name))
+
+  if (looksLikeCardPayment) {
     return { transactionType: 'CREDIT_CARD_PAYMENT', incomeSource: null }
   }
   if (detailed.startsWith('TRANSFER_')) {

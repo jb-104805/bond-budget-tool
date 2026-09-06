@@ -331,30 +331,40 @@ async function loadTransactions() {
       <td class="category-cell">
         ${isSplit
           ? `<span class="muted">Split across ${lines.length} categories</span>`
-          : `<select class="category-select">${categoryOptionsHtml(categories, singleCategoryId)}</select>
-             <label class="rule-check"><input type="checkbox" class="rule-checkbox"> Always categorize "${(tx.merchant_name || '').replace(/"/g, '')}" this way</label>`
+          : `<div class="simple-assign">
+               <select class="category-select">${categoryOptionsHtml(categories, singleCategoryId)}</select>
+               <label class="rule-check"><input type="checkbox" class="rule-checkbox"> Always categorize "${(tx.merchant_name || '').replace(/"/g, '')}" this way</label>
+             </div>`
         }
         <div class="split-editor" style="display:none; margin-top:0.5rem;"></div>
       </td>
       <td>
-        ${isSplit ? '' : '<button class="assign-btn">Save</button>'}
         <button class="split-btn">${isSplit ? 'Edit split' : 'Split'}</button>
       </td>
     `;
 
-    tr.querySelector('.assign-btn')?.addEventListener('click', async () => {
+    async function saveSimple() {
       const select = tr.querySelector('.category-select');
       const categoryId = select.value;
-      if (!categoryId) { alert('Choose a category first.'); return; }
+      if (!categoryId) return;
       const createRule = tr.querySelector('.rule-checkbox').checked;
       await assignSingleCategory(tx, categoryId, createRule, categories);
       loadTransactions();
+    }
+
+    tr.querySelector('.category-select')?.addEventListener('change', saveSimple);
+    tr.querySelector('.rule-checkbox')?.addEventListener('change', () => {
+      // If a category's already chosen, checking the box after the fact still creates the rule.
+      if (tr.querySelector('.category-select').value) saveSimple();
     });
 
     tr.querySelector('.split-btn').addEventListener('click', () => {
       const editor = tr.querySelector('.split-editor');
+      const simpleAssign = tr.querySelector('.simple-assign');
       const isOpen = editor.style.display !== 'none';
       editor.style.display = isOpen ? 'none' : 'block';
+      if (simpleAssign) simpleAssign.style.display = isOpen ? '' : 'none';
+      tr.querySelector('.split-btn').textContent = isOpen ? (isSplit ? 'Edit split' : 'Split') : 'Cancel split';
       if (!isOpen) renderSplitEditor(editor, tx, categories, lines);
     });
 
