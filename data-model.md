@@ -168,6 +168,15 @@ The budget-internal decision ledger — money moving between categories, Unalloc
 
 *Unallocated's running balance is never stored — it's `SUM(Disposition.amount)` where Unallocated is destination, minus `SUM` where it's source, plus any planned-income-never-allocated amounts, all-time or per-month with carry. Same derivation principle as category balances.*
 
+### `PlaidSyncCursor`
+Tracks incremental sync progress per Plaid Item/token, so the Edge Function's `/transactions/sync` calls only fetch what's new each run instead of re-pulling full history. Not part of the conceptual spec — pure sync-plumbing.
+
+| Field | Type | Notes |
+|---|---|---|
+| token_label | string (PK) | matches the Supabase secret name, e.g. `PLAID_TOKEN_CHASE_MAIN` |
+| cursor | string, nullable | Plaid's opaque sync cursor; null = do a full initial sync |
+| updated_at | datetime | |
+
 ### `MonthStatus`
 Tracks open/closed state (§3). Not an enforcement lock — closed months remain editable (§35) — just a milestone marker and closeout timestamp.
 

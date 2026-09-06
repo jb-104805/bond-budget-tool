@@ -6,18 +6,32 @@
 <title>Budget Tool</title>
 <style>
   :root { color-scheme: light dark; }
-  body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; max-width: 720px; margin-inline: auto; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; max-width: 900px; margin-inline: auto; }
   h1 { font-size: 1.25rem; }
   table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; vertical-align: top; }
   th { font-weight: 600; }
   .remaining-negative { color: #c0392b; font-weight: 600; }
   .remaining-positive { color: #27ae60; }
-  input { display: block; width: 100%; box-sizing: border-box; padding: 0.5rem; margin-bottom: 0.5rem; }
+  input, select { display: block; width: 100%; box-sizing: border-box; padding: 0.5rem; margin-bottom: 0.5rem; }
   button { padding: 0.5rem 1rem; cursor: pointer; }
-  #login-view, #dashboard-view { display: none; }
-  #login-view.active, #dashboard-view.active { display: block; }
+  #login-view, #dashboard-view, #transactions-view { display: none; }
+  #login-view.active, #dashboard-view.active, #transactions-view.active { display: block; }
   #error { color: #c0392b; min-height: 1.2em; }
+  .nav-tabs { display: none; gap: 0.5rem; margin-bottom: 1rem; }
+  .nav-tabs.active { display: flex; }
+  .nav-tabs button { background: none; border: 1px solid #ccc; border-radius: 4px; }
+  .nav-tabs button.current { font-weight: 700; background: #eee; }
+  .review-banner { color: #9a6b00; cursor: pointer; text-decoration: underline; background: none; border: none; padding: 0; font: inherit; }
+  .muted { color: #777; font-size: 0.85em; }
+  .filter-toggle { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .filter-toggle button.current { font-weight: 700; text-decoration: underline; }
+  .tx-cell-amount { white-space: nowrap; }
+  .split-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.25rem; }
+  .split-row select { flex: 2; margin-bottom: 0; }
+  .split-row input { flex: 1; margin-bottom: 0; }
+  .rule-check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85em; margin-top: 0.25rem; }
+  .rule-check input { width: auto; margin: 0; }
 </style>
 </head>
 <body>
@@ -30,9 +44,16 @@
   <p id="error"></p>
 </div>
 
+<nav class="nav-tabs" id="nav-tabs">
+  <button id="nav-dashboard" class="current">Dashboard</button>
+  <button id="nav-transactions">Transactions</button>
+  <button id="logout-btn" style="margin-left:auto;">Sign Out</button>
+</nav>
+
 <div id="dashboard-view">
   <h1>Budget Dashboard</h1>
   <p id="month-label"></p>
+  <p><button class="review-banner" id="review-banner" style="display:none;"></button></p>
   <table id="category-table">
     <thead>
       <tr><th>Category</th><th>Budgeted</th><th>Spent</th><th>Remaining</th><th>% Spent</th></tr>
@@ -40,7 +61,22 @@
     <tbody id="category-rows"></tbody>
   </table>
   <p id="empty-state" style="display:none; color:#777;">No categories set up yet.</p>
-  <button id="logout-btn" style="margin-top:1rem;">Sign Out</button>
+</div>
+
+<div id="transactions-view">
+  <h1>Transactions</h1>
+  <div class="filter-toggle">
+    <button id="filter-needs-review" class="current">Needs Review</button>
+    <button id="filter-all">All</button>
+  </div>
+  <p id="auto-rule-note" class="muted" style="display:none;"></p>
+  <table id="tx-table">
+    <thead>
+      <tr><th>Date</th><th>Account</th><th>Description</th><th>Amount</th><th>Category</th><th></th></tr>
+    </thead>
+    <tbody id="tx-rows"></tbody>
+  </table>
+  <p id="tx-empty-state" style="display:none; color:#777;">Nothing here.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -51,18 +87,41 @@ const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const loginView = document.getElementById('login-view');
 const dashboardView = document.getElementById('dashboard-view');
+const transactionsView = document.getElementById('transactions-view');
+const navTabs = document.getElementById('nav-tabs');
 const errorEl = document.getElementById('error');
 
+let txFilter = 'needs_review';
+
 function showLogin() {
+  navTabs.classList.remove('active');
   loginView.classList.add('active');
   dashboardView.classList.remove('active');
+  transactionsView.classList.remove('active');
 }
 
 function showDashboard() {
+  navTabs.classList.add('active');
   loginView.classList.remove('active');
   dashboardView.classList.add('active');
+  transactionsView.classList.remove('active');
+  document.getElementById('nav-dashboard').classList.add('current');
+  document.getElementById('nav-transactions').classList.remove('current');
   loadDashboard();
 }
+
+function showTransactions() {
+  navTabs.classList.add('active');
+  loginView.classList.remove('active');
+  dashboardView.classList.remove('active');
+  transactionsView.classList.add('active');
+  document.getElementById('nav-dashboard').classList.remove('current');
+  document.getElementById('nav-transactions').classList.add('current');
+  loadTransactions();
+}
+
+document.getElementById('nav-dashboard').addEventListener('click', showDashboard);
+document.getElementById('nav-transactions').addEventListener('click', showTransactions);
 
 document.getElementById('login-btn').addEventListener('click', async () => {
   errorEl.textContent = '';
@@ -103,6 +162,21 @@ async function loadDashboard() {
   const { data: lines, error: lineError } = await client
     .from('transaction_category_line')
     .select('category_id, amount, transaction(budget_date)');
+
+  const { count: needsReviewCount } = await client
+    .from('transaction')
+    .select('id', { count: 'exact', head: true })
+    .eq('transaction_type', 'PURCHASE')
+    .eq('categorization_status', 'UNCATEGORIZED');
+
+  const banner = document.getElementById('review-banner');
+  if (needsReviewCount && needsReviewCount > 0) {
+    banner.textContent = `${needsReviewCount} transaction${needsReviewCount === 1 ? '' : 's'} need${needsReviewCount === 1 ? 's' : ''} categorization`;
+    banner.style.display = 'inline';
+    banner.onclick = showTransactions;
+  } else {
+    banner.style.display = 'none';
+  }
 
   if (catError || monthError || lineError) {
     console.error(catError, monthError, lineError);
@@ -148,6 +222,204 @@ async function loadDashboard() {
     `;
     rowsEl.appendChild(tr);
   }
+}
+
+document.getElementById('filter-needs-review').addEventListener('click', () => {
+  txFilter = 'needs_review';
+  document.getElementById('filter-needs-review').classList.add('current');
+  document.getElementById('filter-all').classList.remove('current');
+  loadTransactions();
+});
+document.getElementById('filter-all').addEventListener('click', () => {
+  txFilter = 'all';
+  document.getElementById('filter-all').classList.add('current');
+  document.getElementById('filter-needs-review').classList.remove('current');
+  loadTransactions();
+});
+
+function categoryOptionsHtml(categories, selectedId) {
+  const byGroup = {};
+  for (const c of categories) {
+    const groupName = (c.category_group && c.category_group.name) || 'Other';
+    (byGroup[groupName] = byGroup[groupName] || []).push(c);
+  }
+  let html = '<option value="">— choose a category —</option>';
+  for (const groupName of Object.keys(byGroup).sort()) {
+    html += `<optgroup label="${groupName}">`;
+    for (const c of byGroup[groupName]) {
+      html += `<option value="${c.id}" ${String(c.id) === String(selectedId) ? 'selected' : ''}>${c.name}</option>`;
+    }
+    html += '</optgroup>';
+  }
+  return html;
+}
+
+async function loadTransactions() {
+  // Only PURCHASE-type transactions ever need a budget category — TRANSFER,
+  // CREDIT_CARD_PAYMENT, and INCOME rows are excluded/auto-handled at sync time.
+  let query = client.from('transaction').select('id, budget_date, amount, merchant_name, description, account_id, categorization_status')
+    .eq('transaction_type', 'PURCHASE')
+    .order('budget_date', { ascending: false });
+  if (txFilter === 'needs_review') query = query.eq('categorization_status', 'UNCATEGORIZED');
+
+  const [{ data: transactions, error: txError }, { data: categories }, { data: accounts }, { data: rules }] = await Promise.all([
+    query,
+    client.from('category').select('id, name, category_group(name)').eq('active', true),
+    client.from('account').select('id, name'),
+    client.from('merchant_category_rule').select('id, merchant_pattern, category_id').eq('active', true),
+  ]);
+
+  if (txError) {
+    console.error(txError);
+    return;
+  }
+
+  const accountsById = Object.fromEntries((accounts || []).map(a => [a.id, a]));
+
+  // Auto-apply merchant rules to any still-uncategorized transaction that matches one.
+  const autoRules = rules || [];
+  const stillNeedsReview = [];
+  let autoAppliedCount = 0;
+  for (const tx of (transactions || [])) {
+    if (tx.categorization_status !== 'UNCATEGORIZED') { stillNeedsReview.push(tx); continue; }
+    const name = (tx.merchant_name || tx.description || '').toLowerCase();
+    const match = autoRules.find(r => name.includes(r.merchant_pattern.toLowerCase()));
+    if (match) {
+      await client.from('transaction_category_line').insert({ transaction_id: tx.id, category_id: match.category_id, amount: tx.amount });
+      await client.from('transaction').update({ categorization_status: 'CATEGORIZED' }).eq('id', tx.id);
+      autoAppliedCount++;
+    } else {
+      stillNeedsReview.push(tx);
+    }
+  }
+
+  const noteEl = document.getElementById('auto-rule-note');
+  if (autoAppliedCount > 0) {
+    noteEl.textContent = `${autoAppliedCount} transaction${autoAppliedCount === 1 ? '' : 's'} auto-categorized via existing merchant rules.`;
+    noteEl.style.display = 'block';
+  } else {
+    noteEl.style.display = 'none';
+  }
+
+  const visibleTx = txFilter === 'needs_review' ? stillNeedsReview : stillNeedsReview.concat((transactions || []).filter(t => t.categorization_status !== 'UNCATEGORIZED'));
+  // For "all", fetch existing category lines for categorized rows so we can show current assignment.
+  const categorizedIds = visibleTx.filter(t => t.categorization_status !== 'UNCATEGORIZED').map(t => t.id);
+  let linesByTx = {};
+  if (categorizedIds.length) {
+    const { data: existingLines } = await client.from('transaction_category_line').select('transaction_id, category_id, amount').in('transaction_id', categorizedIds);
+    for (const line of (existingLines || [])) {
+      (linesByTx[line.transaction_id] = linesByTx[line.transaction_id] || []).push(line);
+    }
+  }
+
+  const rowsEl = document.getElementById('tx-rows');
+  rowsEl.innerHTML = '';
+  document.getElementById('tx-empty-state').style.display = visibleTx.length ? 'none' : 'block';
+
+  for (const tx of visibleTx) {
+    const account = accountsById[tx.account_id];
+    const lines = linesByTx[tx.id] || [];
+    const tr = document.createElement('tr');
+    const isSplit = lines.length > 1;
+    const singleCategoryId = lines.length === 1 ? lines[0].category_id : '';
+
+    tr.innerHTML = `
+      <td>${tx.budget_date}</td>
+      <td>${account ? account.name : ''}</td>
+      <td>${tx.merchant_name || tx.description || ''}</td>
+      <td class="tx-cell-amount">$${Number(tx.amount).toFixed(2)}</td>
+      <td class="category-cell">
+        ${isSplit
+          ? `<span class="muted">Split across ${lines.length} categories</span>`
+          : `<select class="category-select">${categoryOptionsHtml(categories, singleCategoryId)}</select>
+             <label class="rule-check"><input type="checkbox" class="rule-checkbox"> Always categorize "${(tx.merchant_name || '').replace(/"/g, '')}" this way</label>`
+        }
+        <div class="split-editor" style="display:none; margin-top:0.5rem;"></div>
+      </td>
+      <td>
+        ${isSplit ? '' : '<button class="assign-btn">Save</button>'}
+        <button class="split-btn">${isSplit ? 'Edit split' : 'Split'}</button>
+      </td>
+    `;
+
+    tr.querySelector('.assign-btn')?.addEventListener('click', async () => {
+      const select = tr.querySelector('.category-select');
+      const categoryId = select.value;
+      if (!categoryId) { alert('Choose a category first.'); return; }
+      const createRule = tr.querySelector('.rule-checkbox').checked;
+      await assignSingleCategory(tx, categoryId, createRule, categories);
+      loadTransactions();
+    });
+
+    tr.querySelector('.split-btn').addEventListener('click', () => {
+      const editor = tr.querySelector('.split-editor');
+      const isOpen = editor.style.display !== 'none';
+      editor.style.display = isOpen ? 'none' : 'block';
+      if (!isOpen) renderSplitEditor(editor, tx, categories, lines);
+    });
+
+    rowsEl.appendChild(tr);
+  }
+}
+
+async function assignSingleCategory(tx, categoryId, createRule, categories) {
+  await client.from('transaction_category_line').delete().eq('transaction_id', tx.id);
+  await client.from('transaction_category_line').insert({ transaction_id: tx.id, category_id: categoryId, amount: tx.amount });
+  await client.from('transaction').update({ categorization_status: 'CATEGORIZED' }).eq('id', tx.id);
+
+  if (createRule && tx.merchant_name) {
+    const { data: existingRule } = await client.from('merchant_category_rule').select('id').eq('merchant_pattern', tx.merchant_name).maybeSingle();
+    if (existingRule) {
+      await client.from('merchant_category_rule').update({ category_id: categoryId, active: true }).eq('id', existingRule.id);
+    } else {
+      await client.from('merchant_category_rule').insert({ merchant_pattern: tx.merchant_name, category_id: categoryId, active: true, created_from: 'MANUAL' });
+    }
+  }
+}
+
+function renderSplitEditor(editor, tx, categories, existingLines) {
+  const rows = existingLines.length ? existingLines.map(l => ({ categoryId: l.category_id, amount: l.amount })) : [{ categoryId: '', amount: '' }, { categoryId: '', amount: '' }];
+
+  function render() {
+    editor.innerHTML = '';
+    for (let i = 0; i < rows.length; i++) {
+      const row = document.createElement('div');
+      row.className = 'split-row';
+      row.innerHTML = `
+        <select>${categoryOptionsHtml(categories, rows[i].categoryId)}</select>
+        <input type="number" step="0.01" value="${rows[i].amount}" placeholder="Amount">
+        <button type="button" class="remove-split-row">✕</button>
+      `;
+      row.querySelector('select').addEventListener('change', (e) => { rows[i].categoryId = e.target.value; });
+      row.querySelector('input').addEventListener('input', (e) => { rows[i].amount = e.target.value; });
+      row.querySelector('.remove-split-row').addEventListener('click', () => { rows.splice(i, 1); render(); });
+      editor.appendChild(row);
+    }
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.textContent = '+ Add category';
+    addBtn.addEventListener('click', () => { rows.push({ categoryId: '', amount: '' }); render(); });
+    editor.appendChild(addBtn);
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.textContent = 'Save split';
+    saveBtn.style.marginLeft = '0.5rem';
+    saveBtn.addEventListener('click', async () => {
+      const total = rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+      if (rows.some(r => !r.categoryId || !r.amount)) { alert('Fill in every row before saving.'); return; }
+      if (Math.abs(total - Number(tx.amount)) > 0.01) {
+        alert(`Split amounts ($${total.toFixed(2)}) must add up to the transaction total ($${Number(tx.amount).toFixed(2)}).`);
+        return;
+      }
+      await client.from('transaction_category_line').delete().eq('transaction_id', tx.id);
+      await client.from('transaction_category_line').insert(rows.map(r => ({ transaction_id: tx.id, category_id: r.categoryId, amount: r.amount })));
+      await client.from('transaction').update({ categorization_status: 'CATEGORIZED' }).eq('id', tx.id);
+      loadTransactions();
+    });
+    editor.appendChild(saveBtn);
+  }
+  render();
 }
 </script>
 </body>
