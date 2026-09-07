@@ -416,10 +416,13 @@ function renderSplitEditor(editor, tx, categories, existingLines) {
     saveBtn.textContent = 'Save split';
     saveBtn.style.marginLeft = '0.5rem';
     saveBtn.addEventListener('click', async () => {
-      const total = rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
       if (rows.some(r => !r.categoryId || !r.amount)) { alert('Fill in every row before saving.'); return; }
-      if (Math.abs(total - Number(tx.amount)) > 0.01) {
-        alert(`Split amounts ($${total.toFixed(2)}) must add up to the transaction total ($${Number(tx.amount).toFixed(2)}).`);
+      // Compare in integer cents — floating-point dollar comparisons can let a
+      // real penny of mismatch slip through right at a tolerance boundary.
+      const totalCents = Math.round(rows.reduce((sum, r) => sum + Number(r.amount || 0) * 100, 0));
+      const txCents = Math.round(Number(tx.amount) * 100);
+      if (totalCents !== txCents) {
+        alert(`Split amounts ($${(totalCents / 100).toFixed(2)}) must add up to the transaction total ($${(txCents / 100).toFixed(2)}).`);
         return;
       }
       await client.from('transaction_category_line').delete().eq('transaction_id', tx.id);
