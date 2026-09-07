@@ -51,7 +51,7 @@ async function plaidFetch(path: string, body: Record<string, unknown>) {
 // Chase card ending in 1234") — the exact mechanism spec §19/§48 explicitly
 // leaves open for technical-design-time validation. Revisit if false
 // positives/negatives show up.
-const CARD_PAYMENT_NAME_PATTERN = /payment.*thank you|online payment|mobile payment|payment to .*card|thank you.*payment/i
+const CARD_PAYMENT_NAME_PATTERN = /payment.*thank you|online payment|mobile payment|payment to .*card|thank you.*payment|ach pmt|ach payment/i
 
 function classify(plaidTx: any, accountType: string): { transactionType: string; incomeSource: string | null } {
   const detailed: string = plaidTx.personal_finance_category?.detailed ?? ''
