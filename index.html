@@ -72,7 +72,7 @@
   <p id="auto-rule-note" class="muted" style="display:none;"></p>
   <table id="tx-table">
     <thead>
-      <tr><th>Date</th><th>Account</th><th>Description</th><th>Amount</th><th>Category</th><th></th></tr>
+      <tr><th>Date</th><th>Account</th><th>Vendor</th><th>Description</th><th>Amount</th><th>Category</th><th></th></tr>
     </thead>
     <tbody id="tx-rows"></tbody>
   </table>
@@ -282,8 +282,16 @@ async function loadTransactions() {
   let autoAppliedCount = 0;
   for (const tx of (transactions || [])) {
     if (tx.categorization_status !== 'UNCATEGORIZED') { stillNeedsReview.push(tx); continue; }
-    const name = (tx.merchant_name || tx.description || '').toLowerCase();
-    const match = autoRules.find(r => name.includes(r.merchant_pattern.toLowerCase()));
+    // Check vendor and description separately (not merged) — a rule targeting
+    // something in the description (e.g. "gas" to catch Costco gas-pump
+    // purchases distinct from Costco goods) needs to match there even though
+    // the vendor name ("Costco") is identical for both.
+    const vendor = (tx.merchant_name || '').toLowerCase();
+    const desc = (tx.description || '').toLowerCase();
+    const match = autoRules.find(r => {
+      const pattern = r.merchant_pattern.toLowerCase();
+      return vendor.includes(pattern) || desc.includes(pattern);
+    });
     if (match) {
       await client.from('transaction_category_line').insert({ transaction_id: tx.id, category_id: match.category_id, amount: tx.amount });
       await client.from('transaction').update({ categorization_status: 'CATEGORIZED' }).eq('id', tx.id);
@@ -326,14 +334,16 @@ async function loadTransactions() {
     tr.innerHTML = `
       <td>${tx.budget_date}</td>
       <td>${account ? account.name : ''}</td>
-      <td>${tx.merchant_name || tx.description || ''}</td>
+      <td>${tx.merchant_name || ''}</td>
+      <td>${tx.description || ''}</td>
       <td class="tx-cell-amount">$${Number(tx.amount).toFixed(2)}</td>
       <td class="category-cell">
         ${isSplit
           ? `<span class="muted">Split across ${lines.length} categories</span>`
           : `<div class="simple-assign">
                <select class="category-select">${categoryOptionsHtml(categories, singleCategoryId)}</select>
-               <label class="rule-check"><input type="checkbox" class="rule-checkbox"> Always categorize "${(tx.merchant_name || '').replace(/"/g, '')}" this way</label>
+               <label class="rule-check"><input type="checkbox" class="rule-checkbox"> Always categorize matching:</label>
+               <input type="text" class="rule-pattern" value="${(tx.merchant_name || '').replace(/"/g, '&quot;')}" placeholder="pattern to match (vendor or description)">
              </div>`
         }
         <div class="split-editor" style="display:none; margin-top:0.5rem;"></div>
@@ -348,7 +358,8 @@ async function loadTransactions() {
       const categoryId = select.value;
       if (!categoryId) return;
       const createRule = tr.querySelector('.rule-checkbox').checked;
-      await assignSingleCategory(tx, categoryId, createRule, categories);
+      const rulePattern = tr.querySelector('.rule-pattern')?.value?.trim();
+      await assignSingleCategory(tx, categoryId, createRule, rulePattern);
       loadTransactions();
     }
 
@@ -372,17 +383,17 @@ async function loadTransactions() {
   }
 }
 
-async function assignSingleCategory(tx, categoryId, createRule, categories) {
+async function assignSingleCategory(tx, categoryId, createRule, rulePattern) {
   await client.from('transaction_category_line').delete().eq('transaction_id', tx.id);
   await client.from('transaction_category_line').insert({ transaction_id: tx.id, category_id: categoryId, amount: tx.amount });
   await client.from('transaction').update({ categorization_status: 'CATEGORIZED' }).eq('id', tx.id);
 
-  if (createRule && tx.merchant_name) {
-    const { data: existingRule } = await client.from('merchant_category_rule').select('id').eq('merchant_pattern', tx.merchant_name).maybeSingle();
+  if (createRule && rulePattern) {
+    const { data: existingRule } = await client.from('merchant_category_rule').select('id').eq('merchant_pattern', rulePattern).maybeSingle();
     if (existingRule) {
       await client.from('merchant_category_rule').update({ category_id: categoryId, active: true }).eq('id', existingRule.id);
     } else {
-      await client.from('merchant_category_rule').insert({ merchant_pattern: tx.merchant_name, category_id: categoryId, active: true, created_from: 'MANUAL' });
+      await client.from('merchant_category_rule').insert({ merchant_pattern: rulePattern, category_id: categoryId, active: true, created_from: 'MANUAL' });
     }
   }
 }
