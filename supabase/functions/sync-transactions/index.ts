@@ -58,9 +58,11 @@ function classify(plaidTx: any, accountType: string): { transactionType: string;
   const primary: string = plaidTx.personal_finance_category?.primary ?? ''
   const name: string = plaidTx.name ?? ''
 
+  // Not gated to CREDIT_CARD accounts: the outgoing side of the same payment
+  // (money leaving a checking account to pay a card) needs the same exclusion,
+  // and it lives on a CHECKING account, not the card.
   const looksLikeCardPayment =
-    accountType === 'CREDIT_CARD' &&
-    (detailed === 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT' || primary === 'LOAN_PAYMENTS' || CARD_PAYMENT_NAME_PATTERN.test(name))
+    detailed === 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT' || primary === 'LOAN_PAYMENTS' || CARD_PAYMENT_NAME_PATTERN.test(name)
 
   if (looksLikeCardPayment) {
     return { transactionType: 'CREDIT_CARD_PAYMENT', incomeSource: null }
