@@ -66,6 +66,11 @@
 <div id="transactions-view">
   <h1>Transactions</h1>
   <div class="filter-toggle">
+    <button id="tx-month-prev">&larr;</button>
+    <span id="tx-month-label" style="font-weight:600;"></span>
+    <button id="tx-month-next">&rarr;</button>
+  </div>
+  <div class="filter-toggle">
     <button id="filter-needs-review" class="current">Needs Review</button>
     <button id="filter-all">All</button>
     <select id="account-filter" style="width:auto; margin-bottom:0; margin-left:1rem;">
@@ -120,6 +125,7 @@ function showTransactions() {
   transactionsView.classList.add('active');
   document.getElementById('nav-dashboard').classList.remove('current');
   document.getElementById('nav-transactions').classList.add('current');
+  refreshTxMonthLabel();
   loadTransactions();
 }
 
@@ -161,6 +167,16 @@ function currentMonthStart() {
   return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
 }
 
+function addMonths(monthStr, delta) {
+  const [y, m] = monthStr.split('-').map(Number);
+  return new Date(y, m - 1 + delta, 1).toISOString().slice(0, 10);
+}
+
+function formatMonthLabel(monthStr) {
+  const [y, m] = monthStr.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+}
+
 async function loadDashboard() {
   const month = currentMonthStart();
   document.getElementById('month-label').textContent = 'Month: ' + month;
@@ -179,11 +195,15 @@ async function loadDashboard() {
     .from('transaction_category_line')
     .select('category_id, amount, transaction(budget_date)');
 
+  // Scoped to this month only, matching the Transactions tab's default —
+  // otherwise this would keep nagging about old months the user has chosen not to deal with.
   const { count: needsReviewCount } = await client
     .from('transaction')
     .select('id', { count: 'exact', head: true })
     .eq('transaction_type', 'PURCHASE')
-    .eq('categorization_status', 'UNCATEGORIZED');
+    .eq('categorization_status', 'UNCATEGORIZED')
+    .gte('budget_date', month)
+    .lt('budget_date', addMonths(month, 1));
 
   const banner = document.getElementById('review-banner');
   if (needsReviewCount && needsReviewCount > 0) {
@@ -240,6 +260,21 @@ async function loadDashboard() {
   }
 }
 
+let txMonth = currentMonthStart();
+function refreshTxMonthLabel() {
+  document.getElementById('tx-month-label').textContent = formatMonthLabel(txMonth);
+}
+document.getElementById('tx-month-prev').addEventListener('click', () => {
+  txMonth = addMonths(txMonth, -1);
+  refreshTxMonthLabel();
+  loadTransactions();
+});
+document.getElementById('tx-month-next').addEventListener('click', () => {
+  txMonth = addMonths(txMonth, 1);
+  refreshTxMonthLabel();
+  loadTransactions();
+});
+
 document.getElementById('filter-needs-review').addEventListener('click', () => {
   txFilter = 'needs_review';
   document.getElementById('filter-needs-review').classList.add('current');
@@ -280,8 +315,11 @@ function categoryOptionsHtml(categories, selectedId) {
 async function loadTransactions() {
   // Only PURCHASE-type transactions ever need a budget category — TRANSFER,
   // CREDIT_CARD_PAYMENT, and INCOME rows are excluded/auto-handled at sync time.
+  const monthEnd = addMonths(txMonth, 1);
   let query = client.from('transaction').select('id, budget_date, amount, merchant_name, description, account_id, categorization_status')
     .eq('transaction_type', 'PURCHASE')
+    .gte('budget_date', txMonth)
+    .lt('budget_date', monthEnd)
     .order('budget_date', { ascending: false });
   if (txFilter === 'needs_review') query = query.eq('categorization_status', 'UNCATEGORIZED');
   if (accountFilter) query = query.eq('account_id', accountFilter);
