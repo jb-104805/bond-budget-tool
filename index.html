@@ -135,9 +135,22 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
   await client.auth.signOut();
 });
 
+let isShowingApp = false;
+
 client.auth.onAuthStateChange((_event, session) => {
-  if (session) showDashboard();
-  else showLogin();
+  if (session) {
+    // Supabase re-fires this listener on things like a token refresh when the
+    // tab regains focus, not just on an actual sign-in — only navigate to the
+    // Dashboard on the real login transition, so re-fires don't reset whichever
+    // tab the user is currently on.
+    if (!isShowingApp) {
+      isShowingApp = true;
+      showDashboard();
+    }
+  } else {
+    isShowingApp = false;
+    showLogin();
+  }
 });
 
 function currentMonthStart() {
