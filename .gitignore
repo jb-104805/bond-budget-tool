@@ -1,0 +1,20 @@
+# Secrets never go in this (public) repo
+.env
+.env.*
+*.pem
+*.key
+supabase/.temp/
+supabase/.env
+
+# Backups belong in the private automation repo
+*.gpg
+backups/
+
+# Old untracked seed file from the previous budget model
+seed.sql
+seed_accounts.sql
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db

@@ -2,521 +2,945 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Budget Tool</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bond Budget</title>
+<meta name="theme-color" content="#1f6f5c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Budget">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
 <style>
-  :root { color-scheme: light dark; }
-  body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; max-width: 900px; margin-inline: auto; }
-  h1 { font-size: 1.25rem; }
-  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; vertical-align: top; }
-  th { font-weight: 600; }
-  .remaining-negative { color: #c0392b; font-weight: 600; }
-  .remaining-positive { color: #27ae60; }
-  input, select { display: block; width: 100%; box-sizing: border-box; padding: 0.5rem; margin-bottom: 0.5rem; }
-  button { padding: 0.5rem 1rem; cursor: pointer; }
-  #login-view, #dashboard-view, #transactions-view { display: none; }
-  #login-view.active, #dashboard-view.active, #transactions-view.active { display: block; }
-  #error { color: #c0392b; min-height: 1.2em; }
-  .nav-tabs { display: none; gap: 0.5rem; margin-bottom: 1rem; }
-  .nav-tabs.active { display: flex; }
-  .nav-tabs button { background: none; border: 1px solid #ccc; border-radius: 4px; }
-  .nav-tabs button.current { font-weight: 700; background: #eee; }
-  .review-banner { color: #9a6b00; cursor: pointer; text-decoration: underline; background: none; border: none; padding: 0; font: inherit; }
-  .muted { color: #777; font-size: 0.85em; }
-  .filter-toggle { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
-  .filter-toggle button.current { font-weight: 700; text-decoration: underline; }
-  .tx-cell-amount { white-space: nowrap; }
-  .split-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.25rem; }
-  .split-row select { flex: 2; margin-bottom: 0; }
-  .split-row input { flex: 1; margin-bottom: 0; }
-  .rule-check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85em; margin-top: 0.25rem; }
-  .rule-check input { width: auto; margin: 0; }
+  :root {
+    --bg: #f5f5f2; --surface: #ffffff; --surface-2: #eeeeea; --text: #1c1c1a; --muted: #6b6b66;
+    --border: #e0e0da; --accent: #1f6f5c; --accent-text: #ffffff; --accent-soft: #e2f0eb;
+    --neg: #c62828; --pos: #2e7d32; --warn-bg: #fff4d6; --warn-text: #7a5600; --adj: #5b4fa3; --overlay: rgba(0,0,0,.35);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121413; --surface: #1c1f1e; --surface-2: #262a28; --text: #ecece8; --muted: #9a9d98;
+      --border: #2f3431; --accent: #4fb596; --accent-text: #0d1a16; --accent-soft: #1d332c;
+      --neg: #ff6b6b; --pos: #6fcf7a; --warn-bg: #3a2f12; --warn-text: #f3cf73; --adj: #a99bf0; --overlay: rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121413; --surface: #1c1f1e; --surface-2: #262a28; --text: #ecece8; --muted: #9a9d98;
+    --border: #2f3431; --accent: #4fb596; --accent-text: #0d1a16; --accent-soft: #1d332c;
+    --neg: #ff6b6b; --pos: #6fcf7a; --warn-bg: #3a2f12; --warn-text: #f3cf73; --adj: #a99bf0; --overlay: rgba(0,0,0,.6);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; min-height: 100dvh; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .hidden { display: none !important; }
+  .neg { color: var(--neg); }
+  .pos { color: var(--pos); }
+  .muted { color: var(--muted); }
+  .small { font-size: .85rem; }
+  .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* layout */
+  .topbar { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: calc(env(safe-area-inset-top) + 10px) 16px 8px;
+            display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
+  .topbar h1 { font-size: 1.2rem; margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .back { border: 0; background: none; color: var(--accent); font-size: 1rem; padding: 8px 4px; min-height: 44px; }
+  .sync-btn { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: .8rem; color: var(--muted); min-height: 36px; }
+  .sync-btn.bad { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
+  main { padding: 12px 16px calc(84px + env(safe-area-inset-bottom)); max-width: 640px; margin: 0 auto; }
+  .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; background: var(--surface); border-top: 1px solid var(--border);
+            padding-bottom: env(safe-area-inset-bottom); }
+  .tabbar button { flex: 1; border: 0; background: none; padding: 12px 0 14px; font-size: .95rem; color: var(--muted); min-height: 56px; position: relative; }
+  .tabbar button.on { color: var(--accent); font-weight: 600; }
+  .badge { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--neg); color: #fff; font-size: .75rem; margin-left: 6px; line-height: 20px; }
+
+  /* controls */
+  .btn { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 12px 16px; min-height: 48px; font-weight: 500; }
+  .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .btn.danger { color: var(--neg); }
+  .btn:disabled { opacity: .5; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-row .btn { flex: 1; }
+  .seg { display: flex; background: var(--surface-2); border-radius: 12px; padding: 3px; gap: 3px; margin-bottom: 12px; }
+  .seg button { flex: 1; border: 0; background: none; border-radius: 9px; padding: 9px 0; min-height: 40px; color: var(--muted); }
+  .seg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .monthnav { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 10px; }
+  .monthnav button { border: 0; background: var(--surface-2); border-radius: 10px; width: 48px; height: 40px; font-size: 1.1rem; }
+  .monthnav span { font-weight: 600; }
+  label.field { display: block; margin-bottom: 12px; font-size: .85rem; color: var(--muted); }
+  label.field input, label.field select { display: block; width: 100%; margin-top: 4px; padding: 12px; border-radius: 10px; border: 1px solid var(--border);
+            background: var(--surface); color: var(--text); font-size: 1rem; min-height: 48px; }
+  .check { display: flex; align-items: center; gap: 10px; padding: 8px 0 14px; }
+  .check input { width: 22px; height: 22px; }
+
+  /* lists */
+  .list { background: var(--surface); border-radius: 14px; border: 1px solid var(--border); overflow: hidden; }
+  .row { display: flex; width: 100%; align-items: center; gap: 10px; text-align: left; border: 0; background: none; padding: 12px 14px;
+         border-bottom: 1px solid var(--border); min-height: 56px; }
+  .row:last-child { border-bottom: 0; }
+  .row .grow { flex: 1; min-width: 0; }
+  .row .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .sub { font-size: .8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row.pending { opacity: .5; }
+  .row .amt { font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .chip { font-size: .72rem; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+  .chip.env { background: var(--accent-soft); color: var(--accent); }
+  .chip.warn { background: var(--warn-bg); color: var(--warn-text); }
+  .row.adj { border-left: 4px solid var(--adj); }
+  .row.adj .kind { color: var(--adj); }
+  .x { border: 0; background: var(--surface-2); border-radius: 10px; width: 40px; height: 40px; flex: none; }
+  .empty { text-align: center; color: var(--muted); padding: 32px 12px; }
+  .section-h { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 4px 6px; }
+
+  /* totals */
+  .totals { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  .totals .big { font-size: 2rem; font-weight: 700; }
+  .totals .split { display: flex; gap: 16px; margin-top: 6px; font-size: .9rem; color: var(--muted); }
+  .totals .split b { color: var(--text); }
+  .detail-head { text-align: center; padding: 6px 0 12px; }
+  .detail-head .big { font-size: 2.2rem; font-weight: 700; }
+
+  /* sheet */
+  .overlay { position: fixed; inset: 0; background: var(--overlay); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+  .sheet { background: var(--bg); width: 100%; max-width: 640px; max-height: 92dvh; overflow-y: auto; border-radius: 18px 18px 0 0;
+           padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); }
+  .sheet .grip { width: 40px; height: 5px; border-radius: 3px; background: var(--border); margin: 4px auto 10px; }
+  .sheet h2 { font-size: 1.1rem; margin: 0 0 4px; }
+  .sheet-actions { position: sticky; bottom: calc(-16px - env(safe-area-inset-bottom)); background: var(--bg); padding: 12px 0 calc(4px + env(safe-area-inset-bottom)); }
+  .split-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .split-row select, .split-row input { min-height: 48px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); padding: 0 10px; font-size: 1rem; }
+  .split-row select { flex: 1.6; min-width: 0; }
+  .split-row input { flex: 1; min-width: 0; }
+  .remaining { padding: 6px 0 4px; font-weight: 600; }
+  .toast { position: fixed; left: 16px; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 30; background: var(--text); color: var(--bg);
+           padding: 12px 14px; border-radius: 12px; text-align: center; max-width: 600px; margin: 0 auto; }
+
+  /* login */
+  #login { max-width: 400px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 48px) 16px 16px; }
+  #login h1 { font-size: 1.6rem; }
+  .error { color: var(--neg); min-height: 1.4em; }
 </style>
 </head>
 <body>
 
-<div id="login-view">
-  <h1>Budget Tool — Sign In</h1>
-  <input id="email" type="email" placeholder="Email" autocomplete="username">
-  <input id="password" type="password" placeholder="Password" autocomplete="current-password">
-  <button id="login-btn">Sign In</button>
-  <p id="error"></p>
+<!-- ============ LOGIN ============ -->
+<div id="login" class="hidden">
+  <h1>Bond Budget</h1>
+  <p class="muted">Sign in once on this phone and it stays signed in.</p>
+  <form id="login-form">
+    <label class="field">Email<input id="email" type="email" autocomplete="username" required></label>
+    <label class="field">Password<input id="password" type="password" autocomplete="current-password" required></label>
+    <button class="btn primary" style="width:100%" type="submit">Sign in</button>
+  </form>
+  <p class="error" id="login-error"></p>
 </div>
 
-<nav class="nav-tabs" id="nav-tabs">
-  <button id="nav-dashboard" class="current">Dashboard</button>
-  <button id="nav-transactions">Transactions</button>
-  <button id="logout-btn" style="margin-left:auto;">Sign Out</button>
-</nav>
+<!-- ============ APP ============ -->
+<div id="app" class="hidden">
+  <header class="topbar">
+    <button class="back hidden" id="back-btn">‹ Back</button>
+    <h1 id="title">Inbox</h1>
+    <button class="sync-btn" id="sync-btn">…</button>
+  </header>
 
-<div id="dashboard-view">
-  <h1>Budget Dashboard</h1>
-  <p id="month-label"></p>
-  <p><button class="review-banner" id="review-banner" style="display:none;"></button></p>
-  <table id="category-table">
-    <thead>
-      <tr><th>Category</th><th>Budgeted</th><th>Spent</th><th>Remaining</th><th>% Spent</th></tr>
-    </thead>
-    <tbody id="category-rows"></tbody>
-  </table>
-  <p id="empty-state" style="display:none; color:#777;">No categories set up yet.</p>
+  <main>
+    <section id="screen-inbox">
+      <div class="seg" id="inbox-seg">
+        <button data-mode="todo" class="on">To do</button>
+        <button data-mode="all">Show all</button>
+      </div>
+      <div class="monthnav hidden" id="inbox-monthnav">
+        <button data-step="-1" aria-label="Previous month">‹</button><span></span><button data-step="1" aria-label="Next month">›</button>
+      </div>
+      <div id="inbox-list"></div>
+    </section>
+
+    <section id="screen-envelopes" class="hidden">
+      <div class="totals">
+        <div class="muted small">Total in all envelopes</div>
+        <div class="big num" id="total-all">$0.00</div>
+        <div class="split">
+          <span>Rollover <b class="num" id="total-roll">$0.00</b></span>
+          <span>Non-rollover <b class="num" id="total-reset">$0.00</b></span>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-bottom:8px">
+        <button class="btn primary" id="refill-btn">Refill</button>
+        <button class="btn" id="manage-btn">Manage</button>
+      </div>
+      <button class="btn hidden" id="undo-refill-btn" style="width:100%;margin-bottom:12px"></button>
+      <div class="list" id="envelope-list"></div>
+    </section>
+
+    <section id="screen-detail" class="hidden">
+      <div class="detail-head">
+        <div class="big num" id="detail-balance"></div>
+        <div class="muted small" id="detail-sub"></div>
+      </div>
+      <div class="btn-row" style="margin-bottom:12px">
+        <button class="btn" id="detail-setbal">Change balance</button>
+        <button class="btn" id="detail-move">Move money</button>
+        <button class="btn" id="detail-settings">Settings</button>
+      </div>
+      <div class="monthnav" id="detail-monthnav">
+        <button data-step="-1" aria-label="Previous month">‹</button><span></span><button data-step="1" aria-label="Next month">›</button>
+      </div>
+      <div class="muted small" id="detail-monthsum" style="margin:0 4px 8px"></div>
+      <div id="detail-list"></div>
+    </section>
+
+    <section id="screen-manage" class="hidden">
+      <button class="btn primary" id="add-env-btn" style="width:100%;margin-bottom:12px">Add envelope</button>
+      <div class="list" id="manage-list"></div>
+      <div class="section-h" id="archived-h">Archived</div>
+      <div class="list" id="archived-list"></div>
+      <div style="margin-top:28px;text-align:center"><button class="btn" id="logout-btn">Sign out</button></div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button data-tab="inbox" class="on">Inbox<span class="badge hidden" id="inbox-badge"></span></button>
+    <button data-tab="envelopes">Envelopes</button>
+  </nav>
 </div>
 
-<div id="transactions-view">
-  <h1>Transactions</h1>
-  <div class="filter-toggle">
-    <button id="tx-month-prev">&larr;</button>
-    <span id="tx-month-label" style="font-weight:600;"></span>
-    <button id="tx-month-next">&rarr;</button>
-  </div>
-  <div class="filter-toggle">
-    <button id="filter-needs-review" class="current">Needs Review</button>
-    <button id="filter-all">All</button>
-    <select id="account-filter" style="width:auto; margin-bottom:0; margin-left:1rem;">
-      <option value="">All Accounts</option>
-    </select>
-  </div>
-  <p id="auto-rule-note" class="muted" style="display:none;"></p>
-  <table id="tx-table">
-    <thead>
-      <tr><th>Date</th><th>Account</th><th>Vendor</th><th>Description</th><th>Amount</th><th>Category</th><th></th></tr>
-    </thead>
-    <tbody id="tx-rows"></tbody>
-  </table>
-  <p id="tx-empty-state" style="display:none; color:#777;">Nothing here.</p>
-</div>
+<div id="overlay" class="overlay hidden"></div>
+<div id="toast" class="toast hidden"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
+// =====================================================================
+// Config. The anon key is public by design; all data is protected by
+// Row Level Security (signed-in only).
+// =====================================================================
 const SUPABASE_URL = 'https://ldpzpobdhchuervziqrn.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxkcHpwb2JkaGNodWVydnppcXJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1Mzg4NTIsImV4cCI6MjEwNDExNDg1Mn0.aadfXiUABUd-jAUWCti_XF-bZ5ceUXXFIOaR5L9TLr4';
-const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
-const loginView = document.getElementById('login-view');
-const dashboardView = document.getElementById('dashboard-view');
-const transactionsView = document.getElementById('transactions-view');
-const navTabs = document.getElementById('nav-tabs');
-const errorEl = document.getElementById('error');
+const SYNC_ON_OPEN_AFTER_MS = 5 * 60 * 1000;
 
-let txFilter = 'needs_review';
+// =====================================================================
+// Helpers
+// =====================================================================
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = (n) => String(n).padStart(2, '0');
+const toCents = (n) => Math.round(Number(n) * 100);
+const fromCents = (c) => c / 100;
 
-function showLogin() {
-  navTabs.classList.remove('active');
-  loginView.classList.add('active');
-  dashboardView.classList.remove('active');
-  transactionsView.classList.remove('active');
+function money(n, { sign = false } = {}) {
+  const v = Number(n) || 0;
+  const s = Math.abs(v).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  if (v < 0) return '−' + s;
+  return (sign && v > 0 ? '+' : '') + s;
+}
+function parseMoney(str) {
+  const cleaned = String(str ?? '').replace(/[$,\s]/g, '').replace('−', '-');
+  if (cleaned === '' || cleaned === '-' || isNaN(Number(cleaned))) return null;
+  return toCents(cleaned);
+}
+function todayYmd() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+function thisMonth() { return todayYmd().slice(0, 7); }
+function shiftMonth(ym, step) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + step, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; }
+function monthRange(ym) { return [`${ym}-01`, `${shiftMonth(ym, 1)}-01`]; }
+function monthLabel(ym) { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); }
+function shortDate(ymd) { const [y, m, d] = ymd.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+function ago(ts) {
+  const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const h = Math.round(mins / 60);
+  return h < 48 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
 }
 
-function showDashboard() {
-  navTabs.classList.add('active');
-  loginView.classList.remove('active');
-  dashboardView.classList.add('active');
-  transactionsView.classList.remove('active');
-  document.getElementById('nav-dashboard').classList.add('current');
-  document.getElementById('nav-transactions').classList.remove('current');
-  loadDashboard();
+let toastTimer;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.remove('hidden');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add('hidden'), 3500);
+}
+function fail(error) {
+  console.error(error);
+  const msg = (error && (error.message || error.error_description)) || String(error);
+  toast(msg.replace(/^.*?ERROR:\s*/, ''));
+}
+// Run an async action with its button disabled (no double taps).
+async function busy(btn, fn) {
+  if (btn) btn.disabled = true;
+  try { await fn(); } finally { if (btn) btn.disabled = false; }
 }
 
-function showTransactions() {
-  navTabs.classList.add('active');
-  loginView.classList.remove('active');
-  dashboardView.classList.remove('active');
-  transactionsView.classList.add('active');
-  document.getElementById('nav-dashboard').classList.remove('current');
-  document.getElementById('nav-transactions').classList.add('current');
-  refreshTxMonthLabel();
-  loadTransactions();
+// =====================================================================
+// State
+// =====================================================================
+const state = {
+  tab: 'inbox',          // inbox | envelopes
+  page: 'inbox',         // inbox | envelopes | detail | manage
+  inboxMode: 'todo',     // todo | all
+  inboxMonth: thisMonth(),
+  detailId: null,
+  detailMonth: thisMonth(),
+  envelopes: [],         // from envelope_balances (includes archived)
+  lastRefill: null,
+  lastSync: null,
+  syncing: false,
+};
+const envById = (id) => state.envelopes.find((e) => e.id === id);
+const activeEnvelopes = () => state.envelopes.filter((e) => !e.archived);
+
+// =====================================================================
+// Data loading
+// =====================================================================
+async function loadEnvelopes() {
+  const { data, error } = await sb.from('envelope_balances').select('*').order('sort_order').order('id');
+  if (error) return fail(error);
+  state.envelopes = data.map((e) => ({ ...e, balance: Number(e.balance), refill_amount: Number(e.refill_amount) }));
+  const r = await sb.from('refills').select('id, created_at').is('undone_at', null).order('created_at', { ascending: false }).limit(1);
+  state.lastRefill = r.data && r.data[0] ? r.data[0] : null;
 }
 
-document.getElementById('nav-dashboard').addEventListener('click', showDashboard);
-document.getElementById('nav-transactions').addEventListener('click', showTransactions);
+async function loadBadge() {
+  const { count } = await sb.from('transactions').select('id', { count: 'exact', head: true }).eq('status', 'unassigned').eq('pending', false);
+  const b = $('inbox-badge');
+  if (count) { b.textContent = count; b.classList.remove('hidden'); } else b.classList.add('hidden');
+}
 
-document.getElementById('login-btn').addEventListener('click', async () => {
-  errorEl.textContent = '';
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
-  const { error } = await client.auth.signInWithPassword({ email, password });
-  if (error) errorEl.textContent = error.message;
-});
+async function loadLastSync() {
+  const { data } = await sb.from('sync_runs').select('started_at, finished_at, ok, result').not('finished_at', 'is', null)
+    .order('started_at', { ascending: false }).limit(1);
+  state.lastSync = data && data[0] ? data[0] : null;
+  renderSyncButton();
+}
 
-document.getElementById('logout-btn').addEventListener('click', async () => {
-  await client.auth.signOut();
-});
+// =====================================================================
+// Navigation
+// =====================================================================
+function show(page) {
+  state.page = page;
+  for (const p of ['inbox', 'envelopes', 'detail', 'manage']) $('screen-' + p).classList.toggle('hidden', p !== page);
+  const tab = page === 'inbox' ? 'inbox' : 'envelopes';
+  state.tab = tab;
+  document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+  $('back-btn').classList.toggle('hidden', !(page === 'detail' || page === 'manage'));
+  const env = envById(state.detailId);
+  $('title').textContent = { inbox: 'Inbox', envelopes: 'Envelopes', detail: env ? env.name : 'Envelope', manage: 'Manage envelopes' }[page];
+  window.scrollTo(0, 0);
+  return renderPage();
+}
 
-let isShowingApp = false;
+async function renderPage() {
+  await loadEnvelopes();
+  if (state.page === 'inbox') return renderInbox();
+  if (state.page === 'envelopes') return renderEnvelopes();
+  if (state.page === 'detail') return renderDetail();
+  if (state.page === 'manage') return renderManage();
+}
 
-client.auth.onAuthStateChange((_event, session) => {
-  if (session) {
-    // Supabase re-fires this listener on things like a token refresh when the
-    // tab regains focus, not just on an actual sign-in — only navigate to the
-    // Dashboard on the real login transition, so re-fires don't reset whichever
-    // tab the user is currently on.
-    if (!isShowingApp) {
-      isShowingApp = true;
-      showDashboard();
+async function refreshAll() {
+  await Promise.all([loadBadge(), renderPage()]);
+}
+
+let refreshTimer;
+function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(refreshAll, 400); }
+
+// =====================================================================
+// Inbox
+// =====================================================================
+function txRow(tx) {
+  const amt = Number(tx.amount);
+  const chips = [];
+  if (tx.pending) chips.push('<span class="chip">Pending</span>');
+  if (tx.attention) chips.push(`<span class="chip warn">${esc(tx.attention)}</span>`);
+  if (tx.status === 'excluded') chips.push('<span class="chip">Excluded</span>');
+  if (tx.status === 'assigned') {
+    for (const a of tx.allocations || []) {
+      const e = envById(a.envelope_id);
+      const part = (tx.allocations.length > 1) ? ` ${money(Math.abs(a.amount))}` : '';
+      chips.push(`<span class="chip env">${esc(e ? e.name : 'Envelope')}${part}</span>`);
     }
-  } else {
-    isShowingApp = false;
-    showLogin();
   }
+  const merchant = tx.merchant_name || tx.name || 'Transaction';
+  const desc = tx.name && tx.name !== merchant ? tx.name : '';
+  return `<button class="row ${tx.pending ? 'pending' : ''}" data-tx="${tx.id}">
+    <div class="grow">
+      <div class="title">${esc(merchant)}</div>
+      <div class="sub">${shortDate(tx.txn_date)} · ${esc(tx.accounts ? tx.accounts.name : '')}${desc ? ' · ' + esc(desc) : ''}</div>
+      ${chips.length ? `<div class="chips">${chips.join('')}</div>` : ''}
+    </div>
+    <div class="amt num ${amt > 0 ? 'pos' : ''}">${money(amt, { sign: true })}</div>
+  </button>`;
+}
+
+async function renderInbox() {
+  const all = state.inboxMode === 'all';
+  $('inbox-monthnav').classList.toggle('hidden', !all);
+  $('inbox-monthnav').querySelector('span').textContent = monthLabel(state.inboxMonth);
+  document.querySelectorAll('#inbox-seg button').forEach((b) => b.classList.toggle('on', b.dataset.mode === state.inboxMode));
+
+  let q = sb.from('transactions').select('*, accounts(name), allocations(envelope_id, amount)')
+    .order('txn_date', { ascending: false }).order('id', { ascending: false });
+  if (all) { const [s, e] = monthRange(state.inboxMonth); q = q.gte('txn_date', s).lt('txn_date', e); }
+  else q = q.eq('status', 'unassigned');
+  const { data, error } = await q;
+  if (error) return fail(error);
+
+  const list = $('inbox-list');
+  if (!data.length) {
+    list.innerHTML = `<div class="empty">${all ? 'No transactions this month.' : 'All caught up. 🎉'}</div>`;
+    return;
+  }
+  list.innerHTML = `<div class="list">${data.map(txRow).join('')}</div>`;
+}
+
+$('inbox-list').addEventListener('click', (ev) => {
+  const row = ev.target.closest('[data-tx]');
+  if (row) openAssign(Number(row.dataset.tx));
+});
+$('inbox-seg').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  state.inboxMode = b.dataset.mode; renderInbox();
+});
+$('inbox-monthnav').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  state.inboxMonth = shiftMonth(state.inboxMonth, Number(b.dataset.step)); renderInbox();
 });
 
-function currentMonthStart() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+// =====================================================================
+// Bottom sheet
+// =====================================================================
+// A brand-new sheet element each time, so listeners from a previous sheet never linger.
+function openSheet(html) {
+  $('overlay').innerHTML = `<div class="sheet" id="sheet" role="dialog" aria-modal="true"><div class="grip"></div>${html}</div>`;
+  $('overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  return $('sheet');
 }
-
-function addMonths(monthStr, delta) {
-  const [y, m] = monthStr.split('-').map(Number);
-  return new Date(y, m - 1 + delta, 1).toISOString().slice(0, 10);
+function closeSheet() {
+  $('overlay').classList.add('hidden');
+  $('overlay').innerHTML = '';
+  document.body.style.overflow = '';
 }
+$('overlay').addEventListener('click', (ev) => { if (ev.target === $('overlay')) closeSheet(); });
 
-function formatMonthLabel(monthStr) {
-  const [y, m] = monthStr.split('-').map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
-}
+// =====================================================================
+// Assign / split / exclude a transaction
+// =====================================================================
+async function openAssign(txId) {
+  if (!state.envelopes.length) await loadEnvelopes();
+  const { data: tx, error } = await sb.from('transactions').select('*, accounts(name), allocations(id, envelope_id, amount)').eq('id', txId).single();
+  if (error) return fail(error);
+  const amt = Number(tx.amount);
+  const merchant = tx.merchant_name || tx.name || 'Transaction';
+  const head = `<h2>${esc(merchant)}</h2>
+    <div class="muted small">${shortDate(tx.txn_date)} · ${esc(tx.accounts ? tx.accounts.name : '')}</div>
+    ${tx.name && tx.name !== merchant ? `<div class="muted small">${esc(tx.name)}</div>` : ''}
+    <div style="font-size:1.8rem;font-weight:700;margin:8px 0" class="num ${amt > 0 ? 'pos' : ''}">${money(amt, { sign: true })}</div>
+    ${tx.attention ? `<div class="chips" style="margin-bottom:8px"><span class="chip warn">${esc(tx.attention)}</span></div>` : ''}`;
 
-async function loadDashboard() {
-  const month = currentMonthStart();
-  document.getElementById('month-label').textContent = 'Month: ' + month;
-
-  const { data: categories, error: catError } = await client
-    .from('category')
-    .select('id, name')
-    .eq('active', true);
-
-  const { data: months, error: monthError } = await client
-    .from('category_month')
-    .select('category_id, allocation_amount, opening_balance')
-    .eq('month', month);
-
-  const { data: lines, error: lineError } = await client
-    .from('transaction_category_line')
-    .select('category_id, amount, transaction(budget_date)');
-
-  // Scoped to this month only, matching the Transactions tab's default —
-  // otherwise this would keep nagging about old months the user has chosen not to deal with.
-  const { count: needsReviewCount } = await client
-    .from('transaction')
-    .select('id', { count: 'exact', head: true })
-    .eq('transaction_type', 'PURCHASE')
-    .eq('categorization_status', 'UNCATEGORIZED')
-    .gte('budget_date', month)
-    .lt('budget_date', addMonths(month, 1));
-
-  const banner = document.getElementById('review-banner');
-  if (needsReviewCount && needsReviewCount > 0) {
-    banner.textContent = `${needsReviewCount} transaction${needsReviewCount === 1 ? '' : 's'} need${needsReviewCount === 1 ? 's' : ''} categorization`;
-    banner.style.display = 'inline';
-    banner.onclick = showTransactions;
-  } else {
-    banner.style.display = 'none';
-  }
-
-  if (catError || monthError || lineError) {
-    console.error(catError, monthError, lineError);
-    errorEl.textContent = 'Error loading dashboard data — see console.';
+  if (tx.pending) {
+    openSheet(`${head}<p class="muted">This charge is still pending. You can assign it once the bank posts it.</p>
+      <div class="sheet-actions"><button class="btn" style="width:100%" data-act="close">OK</button></div>`)
+      .querySelector('[data-act=close]').onclick = closeSheet;
     return;
   }
 
-  const monthByCategory = Object.fromEntries((months || []).map(m => [m.category_id, m]));
-  const spentByCategory = {};
-  const monthPrefix = month.slice(0, 7);
-  for (const line of (lines || [])) {
-    const txMonth = line.transaction && line.transaction.budget_date
-      ? line.transaction.budget_date.slice(0, 7)
-      : null;
-    if (txMonth === monthPrefix) {
-      spentByCategory[line.category_id] = (spentByCategory[line.category_id] || 0) + Number(line.amount);
-    }
-  }
+  const current = tx.status === 'assigned'
+    ? 'In: ' + tx.allocations.map((a) => esc(envById(a.envelope_id)?.name || '?') + (tx.allocations.length > 1 ? ' ' + money(Math.abs(a.amount)) : '')).join(', ')
+    : tx.status === 'excluded' ? 'Excluded from the budget' : '';
 
-  const rowsEl = document.getElementById('category-rows');
-  rowsEl.innerHTML = '';
+  const envButtons = activeEnvelopes().map((e) => `<button class="row" data-env="${e.id}">
+      <div class="grow"><div class="title">${esc(e.name)}</div></div>
+      <div class="num ${e.balance < 0 ? 'neg' : 'muted'}">${money(e.balance)}</div></button>`).join('');
 
-  if (!categories || categories.length === 0) {
-    document.getElementById('empty-state').style.display = 'block';
-    return;
-  }
-  document.getElementById('empty-state').style.display = 'none';
+  const sheet = openSheet(`${head}
+    ${current ? `<p class="small" style="margin:0 0 8px"><b>${current}</b></p>` : ''}
+    <div class="section-h">Tap an envelope</div>
+    <div class="list">${envButtons || '<div class="empty">No envelopes yet.</div>'}</div>
+    <div class="sheet-actions btn-row">
+      <button class="btn" data-act="split">Split</button>
+      ${tx.status !== 'excluded' ? '<button class="btn" data-act="exclude">Exclude</button>' : ''}
+      ${tx.status !== 'unassigned' ? `<button class="btn" data-act="unassign">${tx.status === 'excluded' ? 'Restore' : 'Unassign'}</button>` : ''}
+    </div>`);
 
-  for (const cat of categories) {
-    const cm = monthByCategory[cat.id];
-    const allocated = cm ? Number(cm.allocation_amount) + Number(cm.opening_balance || 0) : 0;
-    const spent = spentByCategory[cat.id] || 0;
-    const remaining = allocated - spent;
-    const pct = allocated > 0 ? Math.round((spent / allocated) * 100) : 0;
-
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${cat.name}</td>
-      <td>$${allocated.toFixed(2)}</td>
-      <td>$${spent.toFixed(2)}</td>
-      <td class="${remaining < 0 ? 'remaining-negative' : 'remaining-positive'}">$${remaining.toFixed(2)}</td>
-      <td>${pct}%</td>
-    `;
-    rowsEl.appendChild(tr);
-  }
+  sheet.querySelectorAll('[data-env]').forEach((b) => b.onclick = () => busy(b, async () => {
+    const { error } = await sb.rpc('assign_transaction', { p_transaction_id: tx.id, p_lines: [{ envelope_id: Number(b.dataset.env), amount: amt }] });
+    if (error) return fail(error);
+    closeSheet(); toast(`Assigned to ${envById(Number(b.dataset.env))?.name}`); refreshAll();
+  }));
+  const ex = sheet.querySelector('[data-act=exclude]');
+  if (ex) ex.onclick = () => busy(ex, async () => {
+    const { error } = await sb.rpc('set_transaction_status', { p_transaction_id: tx.id, p_status: 'excluded' });
+    if (error) return fail(error);
+    closeSheet(); toast('Excluded'); refreshAll();
+  });
+  const un = sheet.querySelector('[data-act=unassign]');
+  if (un) un.onclick = () => busy(un, async () => {
+    const { error } = await sb.rpc('set_transaction_status', { p_transaction_id: tx.id, p_status: 'unassigned' });
+    if (error) return fail(error);
+    closeSheet(); toast('Back in the inbox'); refreshAll();
+  });
+  sheet.querySelector('[data-act=split]').onclick = () => openSplit(tx);
 }
 
-let txMonth = currentMonthStart();
-function refreshTxMonthLabel() {
-  document.getElementById('tx-month-label').textContent = formatMonthLabel(txMonth);
-}
-document.getElementById('tx-month-prev').addEventListener('click', () => {
-  txMonth = addMonths(txMonth, -1);
-  refreshTxMonthLabel();
-  loadTransactions();
-});
-document.getElementById('tx-month-next').addEventListener('click', () => {
-  txMonth = addMonths(txMonth, 1);
-  refreshTxMonthLabel();
-  loadTransactions();
-});
+// Split amounts are typed as plain positive numbers in the transaction's own
+// direction (a $100 purchase split 60 / 40). A minus sign means the opposite
+// direction (e.g. a return inside a Costco run).
+function openSplit(tx) {
+  const amt = Number(tx.amount);
+  const dir = amt < 0 ? -1 : 1;
+  const totalCents = Math.abs(toCents(amt));
+  let rows = tx.status === 'assigned' && tx.allocations.length
+    ? tx.allocations.map((a) => ({ env: a.envelope_id, cents: toCents(a.amount) * dir }))
+    : [{ env: '', cents: totalCents }, { env: '', cents: null }];
 
-document.getElementById('filter-needs-review').addEventListener('click', () => {
-  txFilter = 'needs_review';
-  document.getElementById('filter-needs-review').classList.add('current');
-  document.getElementById('filter-all').classList.remove('current');
-  loadTransactions();
-});
-document.getElementById('filter-all').addEventListener('click', () => {
-  txFilter = 'all';
-  document.getElementById('filter-all').classList.add('current');
-  document.getElementById('filter-needs-review').classList.remove('current');
-  loadTransactions();
-});
+  const options = (sel) => `<option value="">Envelope…</option>` + activeEnvelopes()
+    .map((e) => `<option value="${e.id}" ${e.id === Number(sel) ? 'selected' : ''}>${esc(e.name)}</option>`).join('');
 
-let accountFilter = '';
-let accountFilterPopulated = false;
-document.getElementById('account-filter').addEventListener('change', (e) => {
-  accountFilter = e.target.value;
-  loadTransactions();
-});
+  const sheet = openSheet(`<h2>Split ${money(Math.abs(amt))}</h2>
+    <div class="muted small">${esc(tx.merchant_name || tx.name || '')} · ${shortDate(tx.txn_date)}</div>
+    <div id="split-rows" style="margin-top:12px"></div>
+    <button class="btn" id="split-add" style="width:100%">Add another envelope</button>
+    <div class="sheet-actions">
+      <div class="remaining" id="split-remaining"></div>
+      <div class="btn-row"><button class="btn" id="split-cancel">Cancel</button><button class="btn primary" id="split-save">Save split</button></div>
+    </div>`);
 
-function categoryOptionsHtml(categories, selectedId) {
-  const byGroup = {};
-  for (const c of categories) {
-    const groupName = (c.category_group && c.category_group.name) || 'Other';
-    (byGroup[groupName] = byGroup[groupName] || []).push(c);
+  function draw() {
+    $('split-rows').innerHTML = rows.map((r, i) => `<div class="split-row" data-i="${i}">
+      <select>${options(r.env)}</select>
+      <input inputmode="decimal" placeholder="0.00" value="${r.cents == null ? '' : (r.cents / 100).toFixed(2)}">
+      <button class="x" aria-label="Remove">✕</button></div>`).join('');
+    update();
   }
-  let html = '<option value="">— choose a category —</option>';
-  for (const groupName of Object.keys(byGroup).sort()) {
-    html += `<optgroup label="${groupName}">`;
-    for (const c of byGroup[groupName]) {
-      html += `<option value="${c.id}" ${String(c.id) === String(selectedId) ? 'selected' : ''}>${c.name}</option>`;
-    }
-    html += '</optgroup>';
+  function update() {
+    const used = rows.reduce((s, r) => s + (r.cents || 0), 0);
+    const left = totalCents - used;
+    const valid = left === 0 && rows.length > 0 && rows.every((r) => r.env && r.cents);
+    $('split-remaining').innerHTML = left === 0
+      ? '<span class="pos">Adds up ✓</span>'
+      : `<span class="neg">${left > 0 ? money(left / 100) + ' left to split' : money(-left / 100) + ' too much'}</span>`;
+    $('split-save').disabled = !valid;
   }
-  return html;
+  // 'change' covers older iOS selects that don't fire 'input'.
+  const onEdit = (ev) => {
+    const rowEl = ev.target.closest('.split-row'); if (!rowEl) return;
+    const r = rows[Number(rowEl.dataset.i)];
+    if (ev.target.tagName === 'SELECT') r.env = ev.target.value;
+    else r.cents = parseMoney(ev.target.value);
+    update();
+  };
+  sheet.addEventListener('input', onEdit);
+  sheet.addEventListener('change', onEdit);
+  $('split-rows').addEventListener('click', (ev) => {
+    const x = ev.target.closest('.x'); if (!x) return;
+    rows.splice(Number(x.closest('.split-row').dataset.i), 1); draw();
+  });
+  $('split-add').onclick = () => {
+    const used = rows.reduce((s, r) => s + (r.cents || 0), 0);
+    rows.push({ env: '', cents: totalCents - used > 0 ? totalCents - used : null }); draw();
+  };
+  $('split-cancel').onclick = () => openAssign(tx.id);
+  $('split-save').onclick = () => busy($('split-save'), async () => {
+    const lines = rows.map((r) => ({ envelope_id: Number(r.env), amount: fromCents(r.cents * dir) }));
+    const { error } = await sb.rpc('assign_transaction', { p_transaction_id: tx.id, p_lines: lines });
+    if (error) return fail(error);
+    closeSheet(); toast('Split saved'); refreshAll();
+  });
+  draw();
 }
 
-async function loadTransactions() {
-  // Only PURCHASE-type transactions ever need a budget category — TRANSFER,
-  // CREDIT_CARD_PAYMENT, and INCOME rows are excluded/auto-handled at sync time.
-  const monthEnd = addMonths(txMonth, 1);
-  let query = client.from('transaction').select('id, budget_date, amount, merchant_name, description, account_id, categorization_status')
-    .eq('transaction_type', 'PURCHASE')
-    .gte('budget_date', txMonth)
-    .lt('budget_date', monthEnd)
-    .order('budget_date', { ascending: false });
-  if (txFilter === 'needs_review') query = query.eq('categorization_status', 'UNCATEGORIZED');
-  if (accountFilter) query = query.eq('account_id', accountFilter);
+// =====================================================================
+// Envelopes
+// =====================================================================
+function renderEnvelopes() {
+  const act = activeEnvelopes();
+  const sumC = (arr) => arr.reduce((s, e) => s + toCents(e.balance), 0) / 100;
+  const all = sumC(act), roll = sumC(act.filter((e) => e.rollover)), reset = sumC(act.filter((e) => !e.rollover));
+  $('total-all').textContent = money(all); $('total-all').classList.toggle('neg', all < 0);
+  $('total-roll').textContent = money(roll); $('total-roll').classList.toggle('neg', roll < 0);
+  $('total-reset').textContent = money(reset); $('total-reset').classList.toggle('neg', reset < 0);
 
-  const [{ data: transactions, error: txError }, { data: categories }, { data: accounts }, { data: rules }] = await Promise.all([
-    query,
-    client.from('category').select('id, name, category_group(name)').eq('active', true),
-    client.from('account').select('id, name').order('name'),
-    client.from('merchant_category_rule').select('id, merchant_pattern, category_id').eq('active', true),
+  const undo = $('undo-refill-btn');
+  if (state.lastRefill) {
+    undo.textContent = `Undo refill from ${new Date(state.lastRefill.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    undo.classList.remove('hidden');
+  } else undo.classList.add('hidden');
+
+  $('envelope-list').innerHTML = act.length ? act.map((e) => `<button class="row" data-env="${e.id}">
+      <div class="grow"><div class="title">${esc(e.name)}</div>
+        <div class="sub">${e.rollover ? 'Rollover' : 'Non-rollover'} · refill ${money(e.refill_amount)}</div></div>
+      <div class="amt num ${e.balance < 0 ? 'neg' : ''}">${money(e.balance)}</div></button>`).join('')
+    : '<div class="empty">No envelopes. Use Manage to add one.</div>';
+}
+
+$('envelope-list').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-env]'); if (!b) return;
+  state.detailId = Number(b.dataset.env); state.detailMonth = thisMonth(); show('detail');
+});
+$('manage-btn').onclick = () => show('manage');
+
+$('refill-btn').onclick = () => {
+  const act = activeEnvelopes();
+  let changeC = 0;
+  const rows = act.map((e) => {
+    const after = e.rollover ? e.balance + e.refill_amount : e.refill_amount;
+    changeC += toCents(after) - toCents(e.balance);
+    return `<div class="row"><div class="grow"><div class="title">${esc(e.name)}</div>
+      <div class="sub">${e.rollover ? `adds ${money(e.refill_amount)}` : `resets to ${money(e.refill_amount)}`}</div></div>
+      <div class="num small"><span class="${e.balance < 0 ? 'neg' : 'muted'}">${money(e.balance)}</span> → <b>${money(after)}</b></div></div>`;
+  }).join('');
+  const sheet = openSheet(`<h2>Refill all envelopes?</h2>
+    <p class="muted small">Rollover envelopes get their refill amount added. Non-rollover envelopes are reset to their refill amount. Total changes by <b>${money(changeC / 100, { sign: true })}</b>.</p>
+    <div class="list">${rows}</div>
+    <div class="sheet-actions btn-row"><button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="go">Refill now</button></div>`);
+  sheet.querySelector('[data-act=cancel]').onclick = closeSheet;
+  const go = sheet.querySelector('[data-act=go]');
+  go.onclick = () => busy(go, async () => {
+    const { error } = await sb.rpc('do_refill', { p_date: todayYmd() });
+    if (error) return fail(error);
+    closeSheet(); toast('Envelopes refilled'); refreshAll();
+  });
+};
+
+$('undo-refill-btn').onclick = () => {
+  if (!state.lastRefill) return;
+  const sheet = openSheet(`<h2>Undo the last refill?</h2>
+    <p class="muted">Every envelope goes back to what it would be without that refill. Transactions since then stay put.</p>
+    <div class="sheet-actions btn-row"><button class="btn" data-act="cancel">Cancel</button><button class="btn danger" data-act="go">Undo refill</button></div>`);
+  sheet.querySelector('[data-act=cancel]').onclick = closeSheet;
+  const go = sheet.querySelector('[data-act=go]');
+  go.onclick = () => busy(go, async () => {
+    const { error } = await sb.rpc('undo_refill', { p_refill_id: state.lastRefill.id });
+    if (error) return fail(error);
+    closeSheet(); toast('Refill undone'); refreshAll();
+  });
+};
+
+// =====================================================================
+// Envelope detail
+// =====================================================================
+const KIND_LABEL = { refill: 'Refill', set_balance: 'Balance change', manual: 'Adjustment', move: 'Move' };
+
+async function renderDetail() {
+  const env = envById(state.detailId);
+  if (!env) return show('envelopes');
+  $('title').textContent = env.name;
+  $('detail-balance').textContent = money(env.balance);
+  $('detail-balance').classList.toggle('neg', env.balance < 0);
+  $('detail-sub').textContent = `${env.rollover ? 'Rollover' : 'Non-rollover'} · refill ${money(env.refill_amount)}${env.archived ? ' · archived' : ''}`;
+  $('detail-monthnav').querySelector('span').textContent = monthLabel(state.detailMonth);
+
+  const [s, e] = monthRange(state.detailMonth);
+  const [al, ad] = await Promise.all([
+    sb.from('allocations').select('id, amount, transactions!inner(id, txn_date, name, merchant_name, amount, attention, accounts(name))')
+      .eq('envelope_id', env.id).gte('transactions.txn_date', s).lt('transactions.txn_date', e),
+    sb.from('adjustments').select('*').eq('envelope_id', env.id).gte('adj_date', s).lt('adj_date', e),
   ]);
+  if (al.error) return fail(al.error);
+  if (ad.error) return fail(ad.error);
 
-  if (txError) {
-    console.error(txError);
+  const items = [
+    ...al.data.map((a) => ({ type: 'tx', date: a.transactions.txn_date, order: a.id, a })),
+    ...ad.data.map((j) => ({ type: 'adj', date: j.adj_date, order: j.id, j })),
+  ].sort((x, y) => (y.date.localeCompare(x.date)) || (y.order - x.order));
+
+  const monthSum = items.reduce((s, it) => s + toCents(it.type === 'tx' ? it.a.amount : it.j.amount), 0) / 100;
+  $('detail-monthsum').textContent = items.length ? `Net change this month: ${money(monthSum, { sign: true })}` : '';
+
+  $('detail-list').innerHTML = items.length ? `<div class="list">${items.map((it) => {
+    if (it.type === 'tx') {
+      const t = it.a.transactions; const amt = Number(it.a.amount);
+      const split = Number(t.amount) !== amt ? ` · part of ${money(Math.abs(t.amount))}` : '';
+      return `<button class="row" data-tx="${t.id}"><div class="grow">
+        <div class="title">${esc(t.merchant_name || t.name || 'Transaction')}</div>
+        <div class="sub">${shortDate(t.txn_date)} · ${esc(t.accounts ? t.accounts.name : '')}${split}</div>
+        ${t.attention ? `<div class="chips"><span class="chip warn">${esc(t.attention)}</span></div>` : ''}</div>
+        <div class="amt num ${amt > 0 ? 'pos' : ''}">${money(amt, { sign: true })}</div></button>`;
+    }
+    const j = it.j; const amt = Number(j.amount);
+    return `<div class="row adj"><div class="grow">
+        <div class="title kind">${KIND_LABEL[j.kind] || 'Adjustment'}</div>
+        <div class="sub">${shortDate(j.adj_date)}${j.note && j.note !== 'Refill' ? ' · ' + esc(j.note) : ''}</div></div>
+        <div class="amt num ${amt > 0 ? 'pos' : 'neg'}">${money(amt, { sign: true })}</div>
+        ${j.kind === 'refill' ? '' : `<button class="x" data-del="${j.id}" aria-label="Delete adjustment">✕</button>`}</div>`;
+  }).join('')}</div>` : '<div class="empty">Nothing in this envelope this month.</div>';
+}
+
+$('detail-monthnav').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  state.detailMonth = shiftMonth(state.detailMonth, Number(b.dataset.step)); renderDetail();
+});
+$('detail-list').addEventListener('click', (ev) => {
+  const del = ev.target.closest('[data-del]');
+  if (del) {
+    const sheet = openSheet(`<h2>Delete this adjustment?</h2>
+      <p class="muted">The envelope balance changes back as if it never happened. Deleting one side of a move deletes both sides.</p>
+      <div class="sheet-actions btn-row"><button class="btn" data-act="cancel">Cancel</button><button class="btn danger" data-act="go">Delete</button></div>`);
+    sheet.querySelector('[data-act=cancel]').onclick = closeSheet;
+    const go = sheet.querySelector('[data-act=go]');
+    go.onclick = () => busy(go, async () => {
+      const { error } = await sb.rpc('delete_adjustment', { p_adjustment_id: Number(del.dataset.del) });
+      if (error) return fail(error);
+      closeSheet(); toast('Adjustment deleted'); refreshAll();
+    });
     return;
   }
+  const row = ev.target.closest('[data-tx]');
+  if (row) openAssign(Number(row.dataset.tx));
+});
 
-  const accountsById = Object.fromEntries((accounts || []).map(a => [a.id, a]));
+$('detail-setbal').onclick = () => {
+  const env = envById(state.detailId); if (!env) return;
+  let mode = 'set';
+  const sheet = openSheet(`<h2>Change ${esc(env.name)}</h2>
+    <p class="muted small">Now ${money(env.balance)}. Saved as an adjustment, so you can delete it later.</p>
+    <div class="seg" id="bal-seg"><button data-m="set" class="on">Set balance to</button><button data-m="add">Add / subtract</button></div>
+    <label class="field" id="bal-label">New balance<input id="bal-amt" inputmode="decimal" placeholder="0.00"></label>
+    <label class="field">Note (optional)<input id="bal-note" maxlength="200"></label>
+    <div class="sheet-actions btn-row"><button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="go">Save</button></div>`);
+  $('bal-seg').onclick = (ev) => {
+    const b = ev.target.closest('button'); if (!b) return;
+    mode = b.dataset.m;
+    $('bal-seg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    $('bal-label').firstChild.textContent = mode === 'set' ? 'New balance' : 'Amount (use − to subtract)';
+  };
+  sheet.querySelector('[data-act=cancel]').onclick = closeSheet;
+  const go = sheet.querySelector('[data-act=go]');
+  go.onclick = () => busy(go, async () => {
+    const c = parseMoney($('bal-amt').value);
+    if (c == null) return toast('Enter an amount');
+    const note = $('bal-note').value;
+    const { error } = mode === 'set'
+      ? await sb.rpc('set_envelope_balance', { p_envelope_id: env.id, p_new_balance: fromCents(c), p_note: note, p_date: todayYmd() })
+      : await sb.rpc('add_adjustment', { p_envelope_id: env.id, p_amount: fromCents(c), p_note: note, p_date: todayYmd() });
+    if (error) return fail(error);
+    closeSheet(); toast('Saved'); refreshAll();
+  });
+};
 
-  if (!accountFilterPopulated) {
-    accountFilterPopulated = true;
-    const accountFilterEl = document.getElementById('account-filter');
-    for (const a of (accounts || [])) {
-      const opt = document.createElement('option');
-      opt.value = a.id;
-      opt.textContent = a.name;
-      accountFilterEl.appendChild(opt);
-    }
-  }
+$('detail-move').onclick = () => {
+  const env = envById(state.detailId); if (!env) return;
+  const others = activeEnvelopes().filter((e) => e.id !== env.id);
+  const opts = others.map((e) => `<option value="${e.id}">${esc(e.name)} (${money(e.balance)})</option>`).join('');
+  const sheet = openSheet(`<h2>Move money</h2>
+    <div class="seg" id="mv-seg"><button data-d="out" class="on">From ${esc(env.name)}</button><button data-d="in">Into ${esc(env.name)}</button></div>
+    <label class="field" id="mv-label">To envelope<select id="mv-other">${opts}</select></label>
+    <label class="field">Amount<input id="mv-amt" inputmode="decimal" placeholder="0.00"></label>
+    <label class="field">Note (optional)<input id="mv-note" maxlength="200"></label>
+    <div class="sheet-actions btn-row"><button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="go">Move</button></div>`);
+  let dir = 'out';
+  $('mv-seg').onclick = (ev) => {
+    const b = ev.target.closest('button'); if (!b) return;
+    dir = b.dataset.d;
+    $('mv-seg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    $('mv-label').firstChild.textContent = dir === 'out' ? 'To envelope' : 'From envelope';
+  };
+  sheet.querySelector('[data-act=cancel]').onclick = closeSheet;
+  const go = sheet.querySelector('[data-act=go]');
+  go.onclick = () => busy(go, async () => {
+    const c = parseMoney($('mv-amt').value);
+    if (!c || c <= 0) return toast('Enter an amount more than zero');
+    const other = Number($('mv-other').value);
+    const [from, to] = dir === 'out' ? [env.id, other] : [other, env.id];
+    const { error } = await sb.rpc('move_money', { p_from: from, p_to: to, p_amount: fromCents(c), p_note: $('mv-note').value, p_date: todayYmd() });
+    if (error) return fail(error);
+    closeSheet(); toast('Moved'); refreshAll();
+  });
+};
 
-  // Auto-apply merchant rules to any still-uncategorized transaction that matches one.
-  const autoRules = rules || [];
-  const stillNeedsReview = [];
-  let autoAppliedCount = 0;
-  for (const tx of (transactions || [])) {
-    if (tx.categorization_status !== 'UNCATEGORIZED') { stillNeedsReview.push(tx); continue; }
-    // Check vendor and description separately (not merged) — a rule targeting
-    // something in the description (e.g. "gas" to catch Costco gas-pump
-    // purchases distinct from Costco goods) needs to match there even though
-    // the vendor name ("Costco") is identical for both.
-    const vendor = (tx.merchant_name || '').toLowerCase();
-    const desc = (tx.description || '').toLowerCase();
-    const match = autoRules.find(r => {
-      const pattern = r.merchant_pattern.toLowerCase();
-      return vendor.includes(pattern) || desc.includes(pattern);
-    });
-    if (match) {
-      await client.from('transaction_category_line').insert({ transaction_id: tx.id, category_id: match.category_id, amount: tx.amount });
-      await client.from('transaction').update({ categorization_status: 'CATEGORIZED' }).eq('id', tx.id);
-      autoAppliedCount++;
+$('detail-settings').onclick = () => openEnvelopeSettings(envById(state.detailId));
+
+// =====================================================================
+// Add / edit / archive envelopes
+// =====================================================================
+function openEnvelopeSettings(env) {
+  const isNew = !env;
+  const sheet = openSheet(`<h2>${isNew ? 'New envelope' : 'Envelope settings'}</h2>
+    <label class="field">Name<input id="es-name" maxlength="60" value="${esc(env ? env.name : '')}"></label>
+    <label class="field">Refill amount<input id="es-refill" inputmode="decimal" placeholder="0.00" value="${env ? Number(env.refill_amount).toFixed(2) : ''}"></label>
+    <label class="check"><input type="checkbox" id="es-roll" ${env && env.rollover ? 'checked' : ''}>
+      <span>Rollover <span class="muted small">— keeps its balance and adds the refill amount. Unchecked: reset to the refill amount on each refill.</span></span></label>
+    <div class="sheet-actions">
+      <div class="btn-row"><button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="save">Save</button></div>
+      ${isNew ? '' : `<button class="btn ${env.archived ? '' : 'danger'}" data-act="archive" style="width:100%;margin-top:8px">${env.archived ? 'Restore envelope' : 'Archive envelope'}</button>`}
+    </div>`);
+  sheet.querySelector('[data-act=cancel]').onclick = closeSheet;
+  const save = sheet.querySelector('[data-act=save]');
+  save.onclick = () => busy(save, async () => {
+    const name = $('es-name').value.trim();
+    if (!name) return toast('Give it a name');
+    const refill = $('es-refill').value.trim() === '' ? 0 : parseMoney($('es-refill').value);
+    if (refill == null || refill < 0) return toast('Refill amount must be zero or more');
+    const fields = { name, refill_amount: fromCents(refill), rollover: $('es-roll').checked };
+    let error;
+    if (isNew) {
+      const maxOrder = state.envelopes.reduce((m, e) => Math.max(m, e.sort_order), 0);
+      ({ error } = await sb.from('envelopes').insert({ ...fields, sort_order: maxOrder + 1 }));
     } else {
-      stillNeedsReview.push(tx);
+      ({ error } = await sb.from('envelopes').update(fields).eq('id', env.id));
     }
-  }
+    if (error) return fail(error);
+    closeSheet(); toast('Saved'); refreshAll();
+  });
+  const arch = sheet.querySelector('[data-act=archive]');
+  if (arch) arch.onclick = () => busy(arch, async () => {
+    const { error } = await sb.from('envelopes').update({ archived: !env.archived }).eq('id', env.id);
+    if (error) return fail(error);
+    closeSheet();
+    toast(env.archived ? 'Restored' : 'Archived — its balance no longer counts in the totals');
+    if (!env.archived && state.page === 'detail') { await loadEnvelopes(); show('envelopes'); } else refreshAll();
+  });
+}
 
-  const noteEl = document.getElementById('auto-rule-note');
-  if (autoAppliedCount > 0) {
-    noteEl.textContent = `${autoAppliedCount} transaction${autoAppliedCount === 1 ? '' : 's'} auto-categorized via existing merchant rules.`;
-    noteEl.style.display = 'block';
-  } else {
-    noteEl.style.display = 'none';
-  }
+function renderManage() {
+  const act = activeEnvelopes();
+  const arch = state.envelopes.filter((e) => e.archived);
+  $('manage-list').innerHTML = act.map((e, i) => `<div class="row">
+      <button class="grow" style="border:0;background:none;text-align:left;padding:0;min-height:44px" data-edit="${e.id}">
+        <div class="title">${esc(e.name)}</div><div class="sub">${e.rollover ? 'Rollover' : 'Non-rollover'} · refill ${money(e.refill_amount)}</div></button>
+      <button class="x" data-up="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
+      <button class="x" data-down="${i}" ${i === act.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button></div>`).join('')
+    || '<div class="empty">No envelopes yet.</div>';
+  $('archived-h').classList.toggle('hidden', !arch.length);
+  $('archived-list').classList.toggle('hidden', !arch.length);
+  $('archived-list').innerHTML = arch.map((e) => `<button class="row" data-edit="${e.id}">
+      <div class="grow"><div class="title">${esc(e.name)}</div><div class="sub">Archived · ${money(e.balance)}</div></div></button>`).join('');
+}
 
-  const visibleTx = txFilter === 'needs_review' ? stillNeedsReview : stillNeedsReview.concat((transactions || []).filter(t => t.categorization_status !== 'UNCATEGORIZED'));
-  // For "all", fetch existing category lines for categorized rows so we can show current assignment.
-  const categorizedIds = visibleTx.filter(t => t.categorization_status !== 'UNCATEGORIZED').map(t => t.id);
-  let linesByTx = {};
-  if (categorizedIds.length) {
-    const { data: existingLines } = await client.from('transaction_category_line').select('transaction_id, category_id, amount').in('transaction_id', categorizedIds);
-    for (const line of (existingLines || [])) {
-      (linesByTx[line.transaction_id] = linesByTx[line.transaction_id] || []).push(line);
+async function moveEnvelope(index, step) {
+  const ids = activeEnvelopes().map((e) => e.id);
+  const j = index + step;
+  if (j < 0 || j >= ids.length) return;
+  [ids[index], ids[j]] = [ids[j], ids[index]];
+  const archivedIds = state.envelopes.filter((e) => e.archived).map((e) => e.id);
+  const { error } = await sb.rpc('reorder_envelopes', { p_ids: [...ids, ...archivedIds] });
+  if (error) return fail(error);
+  await loadEnvelopes(); renderManage();
+}
+
+document.querySelector('#screen-manage').addEventListener('click', (ev) => {
+  const ed = ev.target.closest('[data-edit]');
+  if (ed) return openEnvelopeSettings(envById(Number(ed.dataset.edit)));
+  const up = ev.target.closest('[data-up]');
+  if (up) return busy(up, () => moveEnvelope(Number(up.dataset.up), -1));
+  const dn = ev.target.closest('[data-down]');
+  if (dn) return busy(dn, () => moveEnvelope(Number(dn.dataset.down), 1));
+});
+$('add-env-btn').onclick = () => openEnvelopeSettings(null);
+
+// =====================================================================
+// Sync with the bank (Plaid, via the Edge Function)
+// =====================================================================
+function renderSyncButton() {
+  const b = $('sync-btn');
+  b.classList.remove('bad');
+  if (state.syncing) { b.textContent = 'Syncing…'; return; }
+  const s = state.lastSync;
+  if (!s) { b.textContent = 'Sync'; return; }
+  if (!s.ok) { b.textContent = 'Sync issue'; b.classList.add('bad'); return; }
+  b.textContent = 'Synced ' + ago(s.finished_at);
+}
+
+async function syncNow(force) {
+  if (state.syncing) return;
+  state.syncing = true; renderSyncButton();
+  try {
+    const { data, error } = await sb.functions.invoke('sync-transactions', { body: { force: !!force } });
+    if (error) throw error;
+    if (force && data && data.ok === false) {
+      const firstErr = Object.values(data.results || {}).find((r) => r && r.error);
+      toast('Some banks failed to sync: ' + (firstErr ? firstErr.error : 'see sync log'));
     }
-  }
-
-  const rowsEl = document.getElementById('tx-rows');
-  rowsEl.innerHTML = '';
-  document.getElementById('tx-empty-state').style.display = visibleTx.length ? 'none' : 'block';
-
-  for (const tx of visibleTx) {
-    const account = accountsById[tx.account_id];
-    const lines = linesByTx[tx.id] || [];
-    const tr = document.createElement('tr');
-    const isSplit = lines.length > 1;
-    const singleCategoryId = lines.length === 1 ? lines[0].category_id : '';
-
-    tr.innerHTML = `
-      <td>${tx.budget_date}</td>
-      <td>${account ? account.name : ''}</td>
-      <td>${tx.merchant_name || ''}</td>
-      <td>${tx.description || ''}</td>
-      <td class="tx-cell-amount">$${Number(tx.amount).toFixed(2)}</td>
-      <td class="category-cell">
-        ${isSplit
-          ? `<span class="muted">Split across ${lines.length} categories</span>`
-          : `<div class="simple-assign">
-               <select class="category-select">${categoryOptionsHtml(categories, singleCategoryId)}</select>
-               <label class="rule-check"><input type="checkbox" class="rule-checkbox"> Always categorize matching:</label>
-               <input type="text" class="rule-pattern" value="${(tx.merchant_name || '').replace(/"/g, '&quot;')}" placeholder="pattern to match (vendor or description)">
-             </div>`
-        }
-        <div class="split-editor" style="display:none; margin-top:0.5rem;"></div>
-      </td>
-      <td>
-        <button class="split-btn">${isSplit ? 'Edit split' : 'Split'}</button>
-      </td>
-    `;
-
-    async function saveSimple() {
-      const select = tr.querySelector('.category-select');
-      const categoryId = select.value;
-      if (!categoryId) return;
-      const createRule = tr.querySelector('.rule-checkbox').checked;
-      const rulePattern = tr.querySelector('.rule-pattern')?.value?.trim();
-      await assignSingleCategory(tx, categoryId, createRule, rulePattern);
-      loadTransactions();
-    }
-
-    tr.querySelector('.category-select')?.addEventListener('change', saveSimple);
-    tr.querySelector('.rule-checkbox')?.addEventListener('change', () => {
-      // If a category's already chosen, checking the box after the fact still creates the rule.
-      if (tr.querySelector('.category-select').value) saveSimple();
-    });
-
-    tr.querySelector('.split-btn').addEventListener('click', () => {
-      const editor = tr.querySelector('.split-editor');
-      const simpleAssign = tr.querySelector('.simple-assign');
-      const isOpen = editor.style.display !== 'none';
-      editor.style.display = isOpen ? 'none' : 'block';
-      if (simpleAssign) simpleAssign.style.display = isOpen ? '' : 'none';
-      tr.querySelector('.split-btn').textContent = isOpen ? (isSplit ? 'Edit split' : 'Split') : 'Cancel split';
-      if (!isOpen) renderSplitEditor(editor, tx, categories, lines);
-    });
-
-    rowsEl.appendChild(tr);
+  } catch (e) {
+    if (force) fail(e);
+  } finally {
+    state.syncing = false;
+    await loadLastSync();
+    refreshAll();
   }
 }
 
-async function assignSingleCategory(tx, categoryId, createRule, rulePattern) {
-  await client.from('transaction_category_line').delete().eq('transaction_id', tx.id);
-  await client.from('transaction_category_line').insert({ transaction_id: tx.id, category_id: categoryId, amount: tx.amount });
-  await client.from('transaction').update({ categorization_status: 'CATEGORIZED' }).eq('id', tx.id);
-
-  if (createRule && rulePattern) {
-    const { data: existingRule } = await client.from('merchant_category_rule').select('id').eq('merchant_pattern', rulePattern).maybeSingle();
-    if (existingRule) {
-      await client.from('merchant_category_rule').update({ category_id: categoryId, active: true }).eq('id', existingRule.id);
-    } else {
-      await client.from('merchant_category_rule').insert({ merchant_pattern: rulePattern, category_id: categoryId, active: true, created_from: 'MANUAL' });
-    }
+$('sync-btn').onclick = () => {
+  const s = state.lastSync;
+  if (s && !s.ok && !state.syncing) {
+    const errs = Object.entries(s.result || {}).filter(([, r]) => r && r.error)
+      .map(([k, r]) => `<div class="row"><div class="grow"><div class="title">${esc(k.replace('PLAID_TOKEN_', ''))}</div><div class="sub" style="white-space:normal">${esc(r.error)}</div></div></div>`).join('');
+    const sheet = openSheet(`<h2>Last sync had problems</h2>
+      <p class="muted small">If a bank says it needs you to log in again (ITEM_LOGIN_REQUIRED), run relink_account.bat on the PC, then sync again.</p>
+      <div class="list">${errs || '<div class="empty">No details.</div>'}</div>
+      <div class="sheet-actions btn-row"><button class="btn" data-act="cancel">Close</button><button class="btn primary" data-act="go">Sync now</button></div>`);
+    sheet.querySelector('[data-act=cancel]').onclick = closeSheet;
+    sheet.querySelector('[data-act=go]').onclick = () => { closeSheet(); syncNow(true); };
+    return;
   }
+  syncNow(true);
+};
+
+function maybeSyncOnOpen() {
+  const s = state.lastSync;
+  if (!s || Date.now() - new Date(s.started_at).getTime() > SYNC_ON_OPEN_AFTER_MS) syncNow(false);
 }
 
-function renderSplitEditor(editor, tx, categories, existingLines) {
-  const rows = existingLines.length ? existingLines.map(l => ({ categoryId: l.category_id, amount: l.amount })) : [{ categoryId: '', amount: '' }, { categoryId: '', amount: '' }];
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || $('app').classList.contains('hidden')) return;
+  await loadLastSync();
+  maybeSyncOnOpen();
+  refreshAll();
+});
+setInterval(() => { if (!$('app').classList.contains('hidden')) renderSyncButton(); }, 60000);
 
-  function render() {
-    editor.innerHTML = '';
-    for (let i = 0; i < rows.length; i++) {
-      const row = document.createElement('div');
-      row.className = 'split-row';
-      row.innerHTML = `
-        <select>${categoryOptionsHtml(categories, rows[i].categoryId)}</select>
-        <input type="number" step="0.01" value="${rows[i].amount}" placeholder="Amount">
-        <button type="button" class="remove-split-row">✕</button>
-      `;
-      row.querySelector('select').addEventListener('change', (e) => { rows[i].categoryId = e.target.value; });
-      row.querySelector('input').addEventListener('input', (e) => { rows[i].amount = e.target.value; });
-      row.querySelector('.remove-split-row').addEventListener('click', () => { rows.splice(i, 1); render(); });
-      editor.appendChild(row);
-    }
-    const addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.textContent = '+ Add category';
-    addBtn.addEventListener('click', () => { rows.push({ categoryId: '', amount: '' }); render(); });
-    editor.appendChild(addBtn);
+// =====================================================================
+// Tabs, back, auth, startup
+// =====================================================================
+document.querySelector('.tabbar').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  show(b.dataset.tab);
+});
+$('back-btn').onclick = () => show('envelopes');
+$('logout-btn').onclick = () => sb.auth.signOut();
 
-    const saveBtn = document.createElement('button');
-    saveBtn.type = 'button';
-    saveBtn.textContent = 'Save split';
-    saveBtn.style.marginLeft = '0.5rem';
-    saveBtn.addEventListener('click', async () => {
-      if (rows.some(r => !r.categoryId || !r.amount)) { alert('Fill in every row before saving.'); return; }
-      // Compare in integer cents — floating-point dollar comparisons can let a
-      // real penny of mismatch slip through right at a tolerance boundary.
-      const totalCents = Math.round(rows.reduce((sum, r) => sum + Number(r.amount || 0) * 100, 0));
-      const txCents = Math.round(Number(tx.amount) * 100);
-      if (totalCents !== txCents) {
-        alert(`Split amounts ($${(totalCents / 100).toFixed(2)}) must add up to the transaction total ($${(txCents / 100).toFixed(2)}).`);
-        return;
-      }
-      await client.from('transaction_category_line').delete().eq('transaction_id', tx.id);
-      await client.from('transaction_category_line').insert(rows.map(r => ({ transaction_id: tx.id, category_id: r.categoryId, amount: r.amount })));
-      await client.from('transaction').update({ categorization_status: 'CATEGORIZED' }).eq('id', tx.id);
-      loadTransactions();
-    });
-    editor.appendChild(saveBtn);
-  }
-  render();
+$('login-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  $('login-error').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('password').value });
+  if (error) $('login-error').textContent = error.message;
+});
+
+let appStarted = false;
+let channel = null;
+
+async function startApp() {
+  $('login').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  await loadEnvelopes();
+  await show('inbox');
+  loadBadge();
+  await loadLastSync();
+  maybeSyncOnOpen();
+  // Live updates: whatever one phone changes shows up on the other.
+  channel = sb.channel('budget-changes')
+    .on('postgres_changes', { event: '*', schema: 'public' }, scheduleRefresh)
+    .subscribe();
+}
+
+function stopApp() {
+  if (channel) { sb.removeChannel(channel); channel = null; }
+  closeSheet();
+  $('app').classList.add('hidden');
+  $('login').classList.remove('hidden');
+}
+
+// Supabase re-fires this on token refreshes too; only act on real sign-in / sign-out.
+sb.auth.onAuthStateChange((_event, session) => {
+  if (session && !appStarted) { appStarted = true; setTimeout(startApp, 0); }
+  else if (!session && appStarted) { appStarted = false; stopApp(); }
+  else if (!session) { $('login').classList.remove('hidden'); }
+});
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
 </script>
 </body>
