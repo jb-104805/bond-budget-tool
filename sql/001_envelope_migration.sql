@@ -162,6 +162,13 @@ create index adjustments_refill on public.adjustments (refill_id);
 -- ---------------------------------------------------------------------
 -- 7. Sync bookkeeping
 -- ---------------------------------------------------------------------
+-- One row per Plaid token: where the last sync left off. (Created here if an
+-- earlier setup never made it.)
+create table if not exists public.plaid_sync_cursor (
+  token_label text primary key,
+  cursor text,
+  updated_at timestamptz not null default now()
+);
 delete from public.plaid_sync_cursor;
 
 create table public.sync_runs (
@@ -383,6 +390,8 @@ begin
     execute format('alter table public.%I enable row level security', t);
     execute format('create policy "signed-in full access" on public.%I for all to authenticated using (true) with check (true)', t);
   end loop;
+  -- Sync cursors are only touched by the sync function (service role); the app never needs them.
+  alter table public.plaid_sync_cursor enable row level security;
 end $$;
 
 revoke all on public.envelope_balances from anon;
