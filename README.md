@@ -71,5 +71,5 @@ update app_settings set import_start_date = '2026-12-01';
 delete from plaid_sync_cursor;
 ```
 
-The old monthly-budget tables were parked in the `old_budget` schema by the migration.
-Once you're sure you don't need them: `drop schema old_budget cascade;`
+The old monthly-budget tables were parked in the `old_budget` schema by the migration and
+deleted for good with `sql/002_drop_old_budget.sql` (Nov 2026).
